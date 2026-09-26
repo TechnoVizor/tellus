@@ -3,6 +3,7 @@ module github.com/TechnoVizor/tellus
 go 1.26.0
 
 require (
+	github.com/a-h/templ v0.3.1020
 	golang.org/x/crypto v0.57.0
 	gorm.io/driver/postgres v1.6.3
 	gorm.io/gorm v1.31.2

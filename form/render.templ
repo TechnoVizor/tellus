@@ -1,0 +1,91 @@
+package form
+
+import "strconv"
+
+templ fieldLabel(name, label string, required bool) {
+	<label class="label" for={ "f-" + name }>
+		{ label }
+		if required {
+			<span class="req" aria-hidden="true">*</span>
+		}
+	</label>
+}
+
+templ fieldError(name, message string) {
+	if message != "" {
+		<p class="field-error" id={ "e-" + name }>{ message }</p>
+	}
+}
+
+templ textInput(f *TextField, v Value) {
+	<div class="field">
+		@fieldLabel(f.name, f.label, f.required)
+		<input
+			class="input"
+			type="text"
+			id={ "f-" + f.name }
+			name={ f.name }
+			value={ v.Raw }
+			required?={ f.required }
+			if f.maxLength > 0 {
+				maxlength={ strconv.Itoa(f.maxLength) }
+			}
+			if v.Error != "" {
+				aria-invalid="true"
+				aria-describedby={ "e-" + f.name }
+			}
+		/>
+		@fieldError(f.name, v.Error)
+	</div>
+}
+
+templ textareaInput(f *TextField, v Value) {
+	<div class="field">
+		@fieldLabel(f.name, f.label, f.required)
+		<textarea
+			class="input"
+			rows="5"
+			id={ "f-" + f.name }
+			name={ f.name }
+			required?={ f.required }
+			if f.maxLength > 0 {
+				maxlength={ strconv.Itoa(f.maxLength) }
+			}
+			if v.Error != "" {
+				aria-invalid="true"
+				aria-describedby={ "e-" + f.name }
+			}
+		>{ v.Raw }</textarea>
+		@fieldError(f.name, v.Error)
+	</div>
+}
+
+templ numberInput(f *NumberField, v Value) {
+	<div class="field">
+		@fieldLabel(f.name, f.label, f.required)
+		<input
+			class="input"
+			type="number"
+			step="any"
+			id={ "f-" + f.name }
+			name={ f.name }
+			value={ v.Raw }
+			required?={ f.required }
+			if v.Error != "" {
+				aria-invalid="true"
+				aria-describedby={ "e-" + f.name }
+			}
+		/>
+		@fieldError(f.name, v.Error)
+	</div>
+}
+
+templ toggleInput(f *ToggleField, v Value) {
+	<div class="field field-toggle">
+		<label class="check">
+			<input type="checkbox" name={ f.name } value="true" checked?={ v.Raw == "true" }/>
+			<span>{ f.label }</span>
+		</label>
+		@fieldError(f.name, v.Error)
+	</div>
+}
