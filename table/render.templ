@@ -1,0 +1,15 @@
+package table
+
+import "github.com/TechnoVizor/tellus/internal/i18n"
+
+templ textCell(text string) {
+	{ text }
+}
+
+templ boolCell(on bool) {
+	if on {
+		<span class="badge badge-on">{ i18n.T("common.yes") }</span>
+	} else {
+		<span class="badge badge-off">{ i18n.T("common.no") }</span>
+	}
+}
