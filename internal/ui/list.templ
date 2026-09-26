@@ -1,0 +1,131 @@
+package ui
+
+import (
+	"fmt"
+
+	"github.com/TechnoVizor/tellus/internal/i18n"
+)
+
+// ListPage is a full resource list page.
+templ ListPage(v ListView) {
+	@Layout(v.Shell) {
+		<div class="page-head">
+			<h1>{ v.Heading }</h1>
+			<a class="btn btn-primary" href={ templ.SafeURL(v.NewURL) }>{ i18n.T("list.new") }</a>
+		</div>
+		if v.Notice != "" {
+			<p class="notice" role="status">{ v.Notice }</p>
+		}
+		@Records(v)
+	}
+}
+
+// Records is the swappable region: search box, table and pager. htmx replaces
+// it as a whole when the user searches, sorts or changes page.
+templ Records(v ListView) {
+	<div id="records" class="card">
+		if v.Searchable {
+			<form
+				class="toolbar"
+				role="search"
+				method="get"
+				action={ templ.SafeURL(v.ListURL) }
+				hx-get={ v.ListURL }
+				hx-target="#records"
+				hx-swap="outerHTML"
+				hx-push-url="true"
+				hx-trigger="input changed delay:300ms from:find input, submit"
+			>
+				<input
+					class="input"
+					type="search"
+					name="q"
+					value={ v.Search }
+					placeholder={ i18n.T("list.search") }
+					aria-label={ i18n.T("list.search") }
+				/>
+				if v.Sort != "" {
+					<input type="hidden" name="sort" value={ v.Sort }/>
+					<input type="hidden" name="dir" value={ v.Dir }/>
+				}
+			</form>
+		}
+		if len(v.Rows) == 0 {
+			<div class="empty">{ i18n.T("list.empty") }</div>
+		} else {
+			<div class="table-wrap">
+				<table class="table">
+					<thead>
+						<tr>
+							for _, col := range v.Columns {
+								<th
+									scope="col"
+									if col.AriaSort != "" {
+										aria-sort={ col.AriaSort }
+									}
+								>
+									if col.Sortable {
+										<a
+											href={ templ.SafeURL(col.SortURL) }
+											hx-get={ col.SortURL }
+											hx-target="#records"
+											hx-swap="outerHTML"
+											hx-push-url="true"
+										>{ col.Label } <span aria-hidden="true">{ col.SortMark }</span></a>
+									} else {
+										{ col.Label }
+									}
+								</th>
+							}
+							<th scope="col"><span class="sr-only">{ i18n.T("list.actions") }</span></th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, row := range v.Rows {
+							<tr>
+								for _, cell := range row.Cells {
+									<td>@cell</td>
+								}
+								<td class="actions">
+									<a class="btn btn-sm" href={ templ.SafeURL(row.EditURL) }>{ i18n.T("list.edit") }</a>
+									<form
+										method="post"
+										action={ templ.SafeURL(row.DeleteURL) }
+										data-confirm={ i18n.T("list.confirm_delete") }
+										x-data="confirmSubmit"
+										x-on:submit="ask($event)"
+									>
+										<input type="hidden" name="_csrf" value={ v.Shell.CSRF }/>
+										<button type="submit" class="btn btn-sm btn-danger">{ i18n.T("list.delete") }</button>
+									</form>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+		<div class="pager">
+			<span>{ fmt.Sprintf(i18n.T("list.summary"), v.Total, v.Page, v.TotalPages) }</span>
+			<span class="pager-links">
+				@pagerLink(v.PrevURL, i18n.T("list.previous"))
+				@pagerLink(v.NextURL, i18n.T("list.next"))
+			</span>
+		</div>
+	</div>
+}
+
+templ pagerLink(href, label string) {
+	if href == "" {
+		<span class="btn btn-sm" aria-disabled="true">{ label }</span>
+	} else {
+		<a
+			class="btn btn-sm"
+			href={ templ.SafeURL(href) }
+			hx-get={ href }
+			hx-target="#records"
+			hx-swap="outerHTML"
+			hx-push-url="true"
+		>{ label }</a>
+	}
+}

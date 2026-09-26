@@ -1,0 +1,29 @@
+package ui
+
+import "github.com/TechnoVizor/tellus/internal/i18n"
+
+// FormPage is the create and edit page.
+templ FormPage(v FormView) {
+	@Layout(v.Shell) {
+		<div class="page-head">
+			<h1>{ v.Heading }</h1>
+		</div>
+		<div class="card form-narrow">
+			<div class="card-body">
+				if v.Error != "" {
+					<p class="alert" role="alert">{ v.Error }</p>
+				}
+				<form method="post" action={ templ.SafeURL(v.Action) } novalidate>
+					<input type="hidden" name="_csrf" value={ v.Shell.CSRF }/>
+					for _, field := range v.Fields {
+						@field
+					}
+					<div class="form-actions">
+						<button type="submit" class="btn btn-primary">{ i18n.T("form.save") }</button>
+						<a class="btn" href={ templ.SafeURL(v.CancelURL) }>{ i18n.T("form.cancel") }</a>
+					</div>
+				</form>
+			</div>
+		</div>
+	}
+}
