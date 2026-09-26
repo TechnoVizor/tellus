@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"testing"
+	"time"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -25,10 +26,7 @@ func Open(t testing.TB) *gorm.DB {
 	}
 	cfg := &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)}
 
-	admin, err := gorm.Open(postgres.Open(dsn), cfg)
-	if err != nil {
-		t.Fatalf("connect: %v", err)
-	}
+	admin := connect(t, dsn, cfg)
 	buf := make([]byte, 6)
 	if _, err := rand.Read(buf); err != nil {
 		t.Fatal(err)
@@ -45,10 +43,7 @@ func Open(t testing.TB) *gorm.DB {
 	q := u.Query()
 	q.Set("search_path", schema)
 	u.RawQuery = q.Encode()
-	db, err := gorm.Open(postgres.Open(u.String()), cfg)
-	if err != nil {
-		t.Fatalf("connect to schema: %v", err)
-	}
+	db := connect(t, u.String(), cfg)
 
 	t.Cleanup(func() {
 		if sqlDB, err := db.DB(); err == nil {
@@ -60,4 +55,22 @@ func Open(t testing.TB) *gorm.DB {
 		}
 	})
 	return db
+}
+
+// connect opens the database, retrying a few times. On some Windows machines a
+// loopback connect occasionally fails with a transient connectex timeout, and a
+// quick retry gets past it without hiding a database that is really down.
+func connect(t testing.TB, dsn string, cfg *gorm.Config) *gorm.DB {
+	t.Helper()
+	var lastErr error
+	for attempt := 0; attempt < 4; attempt++ {
+		db, err := gorm.Open(postgres.Open(dsn), cfg)
+		if err == nil {
+			return db
+		}
+		lastErr = err
+		time.Sleep(250 * time.Millisecond)
+	}
+	t.Fatalf("connect: %v", lastErr)
+	return nil
 }

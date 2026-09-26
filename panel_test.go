@@ -114,6 +114,19 @@ func TestAssetsAreServedWithoutLogin(t *testing.T) {
 	}
 }
 
+// The assets handler sees the path without its leading slash once the panel
+// strips "/assets/", so caching rules must hold through the real mount too.
+func TestFontsAreCachedImmutablyThroughThePanel(t *testing.T) {
+	h := newHarness(t, Config{})
+	res := h.get("/assets/fonts/inter-latin.woff2")
+	if res.status != http.StatusOK || res.header.Get("Content-Type") != "font/woff2" {
+		t.Fatalf("font: %d %q", res.status, res.header.Get("Content-Type"))
+	}
+	if cc := res.header.Get("Cache-Control"); !strings.Contains(cc, "immutable") {
+		t.Errorf("fonts should be immutable through the panel mount, got %q", cc)
+	}
+}
+
 func TestLoginSuccessAndSessionCookie(t *testing.T) {
 	h := newHarness(t, Config{})
 	res := h.login("Admin@Example.com", "correct horse")
@@ -296,10 +309,22 @@ func TestLogoutNeedsCSRFAndEndsSession(t *testing.T) {
 
 func TestOversizedBodyIsRejected(t *testing.T) {
 	h := newHarness(t, Config{})
-	big := url.Values{"email": {"a@b.co"}, "password": {strings.Repeat("x", 2<<20)}}
-	res := h.post("/login", big)
-	if res.status < 400 {
-		t.Fatalf("2 MiB body accepted: %d", res.status)
+	big := url.Values{
+		"email":    {"a@b.co"},
+		"password": {strings.Repeat("x", 2<<20)},
+		"_csrf":    {h.csrfToken()},
+	}
+	req, _ := http.NewRequest(http.MethodPost, h.base+"/login", strings.NewReader(big.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := h.client.Do(req)
+	// A transport error also counts as a rejection: the server may reset the
+	// connection while the client is still sending, and Windows reports that as
+	// a send error instead of the 4xx response.
+	if err == nil {
+		resp.Body.Close()
+		if resp.StatusCode < 400 {
+			t.Fatalf("2 MiB body accepted: %d", resp.StatusCode)
+		}
 	}
 	if h.sessionCookie() != nil {
 		t.Fatal("session issued for an oversized body")

@@ -46,7 +46,9 @@ func Handler() http.Handler {
 		}
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("ETag", `"`+version+`"`)
-		if r.URL.Query().Get("v") == version || strings.HasPrefix(r.URL.Path, "/fonts/") {
+		// Behind http.StripPrefix the path has no leading slash, directly it does.
+		inFonts := strings.HasPrefix(strings.TrimPrefix(r.URL.Path, "/"), "fonts/")
+		if r.URL.Query().Get("v") == version || inFonts {
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		} else {
 			w.Header().Set("Cache-Control", "no-cache")

@@ -3,6 +3,7 @@ package tellus
 import (
 	"context"
 	"io"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -102,7 +103,7 @@ func newHarness(t *testing.T, cfg Config, regs ...Registrable) *harness {
 	jar, _ := cookiejar.New(nil)
 	// A private transport per harness: the shared default transport could hand a
 	// later test a pooled connection to a closed server that reused its port.
-	transport := &http.Transport{}
+	transport := &http.Transport{DialContext: retryDial}
 	t.Cleanup(transport.CloseIdleConnections)
 	client := &http.Client{
 		Jar:           jar,
@@ -111,6 +112,26 @@ func newHarness(t *testing.T, cfg Config, regs ...Registrable) *harness {
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
 	return &harness{t: t, panel: p, srv: srv, client: client, base: srv.URL + p.Prefix()}
+}
+
+// retryDial dials like the default transport but retries a few times. On some
+// Windows machines a loopback connect occasionally fails with a transient
+// connectex timeout, and a quick retry gets past it.
+func retryDial(ctx context.Context, network, addr string) (net.Conn, error) {
+	d := net.Dialer{Timeout: 5 * time.Second}
+	var lastErr error
+	for attempt := 0; attempt < 4; attempt++ {
+		conn, err := d.DialContext(ctx, network, addr)
+		if err == nil {
+			return conn, nil
+		}
+		lastErr = err
+		if ctx.Err() != nil {
+			break
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	return nil, lastErr
 }
 
 func (h *harness) do(req *http.Request) result {
