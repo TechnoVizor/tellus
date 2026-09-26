@@ -49,8 +49,8 @@ func (a *GormAuthenticator) Migrate() error { return a.db.AutoMigrate(&AdminUser
 // CreateUser adds an account. Emails are stored lowercased and must be unique.
 func (a *GormAuthenticator) CreateUser(ctx context.Context, email, name, password string) error {
 	email = normalizeEmail(email)
-	if !strings.Contains(email, "@") {
-		return errors.New("tellus: invalid email")
+	if !strings.Contains(email, "@") || !secure.ValidText(email) || !secure.ValidText(name) {
+		return errors.New("tellus: invalid email or name")
 	}
 	if len(password) < 8 {
 		return errors.New("tellus: password must be at least 8 characters")
@@ -63,8 +63,13 @@ func (a *GormAuthenticator) CreateUser(ctx context.Context, email, name, passwor
 }
 
 func (a *GormAuthenticator) Authenticate(ctx context.Context, email, password string) (User, error) {
+	email = normalizeEmail(email)
+	if !secure.ValidText(email) { // Postgres would fail the query; it is just an unknown email
+		secure.DummyVerify(password)
+		return nil, ErrInvalidCredentials
+	}
 	var u AdminUser
-	tx := a.db.WithContext(ctx).Where("email = ?", normalizeEmail(email)).Limit(1).Find(&u)
+	tx := a.db.WithContext(ctx).Where("email = ?", email).Limit(1).Find(&u)
 	if tx.Error != nil {
 		return nil, tx.Error
 	}

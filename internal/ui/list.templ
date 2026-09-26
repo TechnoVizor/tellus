@@ -16,39 +16,46 @@ templ ListPage(v ListView) {
 		if v.Notice != "" {
 			<p class="notice" role="status">{ v.Notice }</p>
 		}
-		@Records(v)
+		<div class="card">
+			if v.Searchable {
+				<form
+					id="list-search"
+					class="toolbar"
+					role="search"
+					method="get"
+					action={ templ.SafeURL(v.ListURL) }
+					hx-get={ v.ListURL }
+					hx-target="#records"
+					hx-swap="outerHTML"
+					hx-push-url="true"
+					hx-trigger="input changed delay:300ms from:find input, submit"
+				>
+					<input
+						id="search-q"
+						class="input"
+						type="search"
+						name="q"
+						value={ v.Search }
+						placeholder={ i18n.T("list.search") }
+						aria-label={ i18n.T("list.search") }
+					/>
+				</form>
+			}
+			@Records(v)
+		</div>
 	}
 }
 
-// Records is the swappable region: search box, table and pager. htmx replaces
-// it as a whole when the user searches, sorts or changes page.
+// Records is the swappable region: table and pager. htmx replaces it as a whole
+// when the user searches, sorts or changes page. The search box stays outside
+// it, because htmx only restores focus to an element with an id and would drop
+// the caret after every pause in typing. The current sort travels with the
+// region as hidden inputs tied to the search form, so a new search keeps it.
 templ Records(v ListView) {
-	<div id="records" class="card">
-		if v.Searchable {
-			<form
-				class="toolbar"
-				role="search"
-				method="get"
-				action={ templ.SafeURL(v.ListURL) }
-				hx-get={ v.ListURL }
-				hx-target="#records"
-				hx-swap="outerHTML"
-				hx-push-url="true"
-				hx-trigger="input changed delay:300ms from:find input, submit"
-			>
-				<input
-					class="input"
-					type="search"
-					name="q"
-					value={ v.Search }
-					placeholder={ i18n.T("list.search") }
-					aria-label={ i18n.T("list.search") }
-				/>
-				if v.Sort != "" {
-					<input type="hidden" name="sort" value={ v.Sort }/>
-					<input type="hidden" name="dir" value={ v.Dir }/>
-				}
-			</form>
+	<div id="records">
+		if v.Searchable && v.Sort != "" {
+			<input type="hidden" name="sort" value={ v.Sort } form="list-search"/>
+			<input type="hidden" name="dir" value={ v.Dir } form="list-search"/>
 		}
 		if len(v.Rows) == 0 {
 			<div class="empty">{ i18n.T("list.empty") }</div>

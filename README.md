@@ -40,11 +40,16 @@ err = panel.Register(
 			form.Toggle("Active"),
 		),
 )
+if err != nil { // a typo in a field name is reported here, at startup
+	log.Fatal(err)
+}
 
 mux := http.NewServeMux()
 panel.Mount(mux) // serves the panel at panel.Prefix()
 log.Fatal(http.ListenAndServe(":8080", mux))
 ```
+
+Sign-in cookies are `Secure` by default, so a browser drops them over plain http (only `localhost` is exempt). For local development on another host name, set `InsecureCookies: true`.
 
 `Panel.Handler()` returns a plain `http.Handler` for routers other than `net/http`; mount it at `panel.Prefix() + "/"`.
 

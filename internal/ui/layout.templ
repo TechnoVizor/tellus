@@ -7,6 +7,7 @@ templ head(title, brand string, asset func(string) string) {
 		<meta charset="utf-8"/>
 		<meta name="viewport" content="width=device-width, initial-scale=1"/>
 		<meta name="robots" content="noindex, nofollow"/>
+		<meta name="htmx-config" content={ `{"refreshOnHistoryMiss":true}` }/>
 		<title>{ title } | { brand }</title>
 		<script src={ asset("theme-init.js") }></script>
 		<link rel="stylesheet" href={ asset("app.css") }/>

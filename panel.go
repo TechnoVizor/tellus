@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	pathpkg "path"
 	"regexp"
 	"slices"
 	"strings"
@@ -160,7 +161,38 @@ func (p *Panel) build() http.Handler {
 	outer := http.NewServeMux()
 	outer.Handle("GET /assets/", http.StripPrefix("/assets/", assets.Handler()))
 	outer.Handle("/", guarded)
-	return http.StripPrefix(p.prefix, outer)
+	return p.stripPrefix(outer)
+}
+
+// stripPrefix serves next under the panel prefix. It handles two edge cases that
+// http.StripPrefix leaves to the inner mux, whose redirects would drop the
+// prefix: the bare prefix (routers such as chi pass "/admin" through as is) and
+// paths that need cleaning.
+func (p *Panel) stripPrefix(next http.Handler) http.Handler {
+	strip := http.StripPrefix(p.prefix, next)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == p.prefix {
+			http.Redirect(w, r, p.prefix+"/", http.StatusTemporaryRedirect)
+			return
+		}
+		if clean := cleanPath(r.URL.Path); clean != r.URL.Path {
+			if r.URL.RawQuery != "" {
+				clean += "?" + r.URL.RawQuery
+			}
+			http.Redirect(w, r, clean, http.StatusTemporaryRedirect)
+			return
+		}
+		strip.ServeHTTP(w, r)
+	})
+}
+
+// cleanPath is path.Clean that keeps a trailing slash.
+func cleanPath(p string) string {
+	c := pathpkg.Clean(p)
+	if strings.HasSuffix(p, "/") && c != "/" {
+		c += "/"
+	}
+	return c
 }
 
 // url builds a panel URL from a path such as "/login".
@@ -281,7 +313,7 @@ func (p *Panel) render(w http.ResponseWriter, r *http.Request, status int, c tem
 
 func (p *Panel) serverError(w http.ResponseWriter, err error) {
 	slog.Error("tellus: request failed", "error", err)
-	http.Error(w, "Internal server error", http.StatusInternalServerError)
+	http.Error(w, i18n.T("error.internal"), http.StatusInternalServerError)
 }
 
 func (p *Panel) shell(r *http.Request, u User, title, activeSlug string) ui.Shell {

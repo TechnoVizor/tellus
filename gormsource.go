@@ -12,6 +12,8 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"gorm.io/gorm/schema"
+
+	"github.com/TechnoVizor/tellus/internal/secure"
 )
 
 const (
@@ -166,18 +168,23 @@ func (s *GormSource[T]) column(name string) (*schema.Field, error) {
 func (s *GormSource[T]) parseID(id string) (any, error) {
 	switch k := s.pk.FieldType.Kind(); {
 	case isIntKind(k):
-		n, err := strconv.ParseInt(id, 10, 64)
+		// The key's own width: an id too big for an int4 column cannot exist, and
+		// sending it would fail inside the driver.
+		n, err := strconv.ParseInt(id, 10, s.pk.FieldType.Bits())
 		if err != nil {
 			return nil, ErrNotFound
 		}
 		return n, nil
 	case isUintKind(k):
-		n, err := strconv.ParseUint(id, 10, 64)
+		n, err := strconv.ParseUint(id, 10, s.pk.FieldType.Bits())
 		if err != nil || n > math.MaxInt64 {
 			return nil, ErrNotFound
 		}
 		return int64(n), nil
 	default:
+		if !secure.ValidText(id) { // Postgres would reject it, so it cannot exist
+			return nil, ErrNotFound
+		}
 		return id, nil
 	}
 }

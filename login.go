@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"net/netip"
 	"strings"
 
 	"github.com/TechnoVizor/tellus/internal/i18n"
@@ -33,7 +34,8 @@ func (p *Panel) loginForm(w http.ResponseWriter, r *http.Request) {
 func (p *Panel) loginSubmit(w http.ResponseWriter, r *http.Request) {
 	email := strings.TrimSpace(r.PostFormValue("email"))
 
-	if !p.limiter.Allow(clientIP(r)) {
+	key := clientIP(r)
+	if !p.limiter.Allow(key) {
 		p.render(w, r, http.StatusTooManyRequests, ui.LoginPage(p.loginView(r, email, i18n.T("login.too_many"))))
 		return
 	}
@@ -54,6 +56,7 @@ func (p *Panel) loginSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	p.startSession(w, user)
+	p.limiter.Reset(key) // a person behind a shared address is not locked out by their own sign-ins
 	http.Redirect(w, r, p.url("/"), http.StatusSeeOther)
 }
 
@@ -62,13 +65,25 @@ func (p *Panel) logout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, p.url("/login"), http.StatusSeeOther)
 }
 
-// clientIP is the peer address. Behind a reverse proxy, set r.RemoteAddr from
-// the trusted forwarding header (for example with chi's RealIP middleware)
-// before the request reaches the panel.
+// clientIP is the key the sign-in limiter counts by: the peer address, with an
+// IPv6 address reduced to its /64 network, because one host or customer holds a
+// whole /64 and could otherwise use a fresh address for every attempt. Behind a
+// reverse proxy, set r.RemoteAddr from the trusted forwarding header (for
+// example with chi's RealIP middleware) before the request reaches the panel.
 func clientIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return r.RemoteAddr
 	}
-	return host
+	ip, err := netip.ParseAddr(host)
+	if err != nil {
+		return host
+	}
+	ip = ip.WithZone("").Unmap()
+	if ip.Is6() {
+		if prefix, err := ip.Prefix(64); err == nil {
+			return prefix.Addr().String()
+		}
+	}
+	return ip.String()
 }

@@ -2,9 +2,16 @@ package i18n
 
 var en = map[string]string{
 	// validation
-	"validation.required":   "This field is required.",
-	"validation.max_length": "Must be at most %d characters.",
-	"validation.number":     "Enter a valid number.",
+	"validation.required":     "This field is required.",
+	"validation.max_length":   "Must be at most %d characters.",
+	"validation.number":       "Enter a valid number.",
+	"validation.invalid_text": "Contains characters that are not allowed.",
+
+	// errors
+	"error.csrf":        "The form has expired or was not sent from this site. Reload the page and try again.",
+	"error.internal":    "Something went wrong on our side. Try again in a moment.",
+	"error.too_large":   "The request is too large.",
+	"error.bad_request": "The request could not be read.",
 
 	// common
 	"common.yes":       "Yes",

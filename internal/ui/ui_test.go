@@ -104,8 +104,9 @@ func TestRecordsRegion(t *testing.T) {
 	out := render(t, Records(sampleList()))
 	mustContain(t, out,
 		`id="records"`,
-		`role="search"`, `hx-target="#records"`, `hx-push-url="true"`, `name="q"`,
-		`name="sort" value="Name"`, `name="dir" value="asc"`, // search keeps the sort
+		// The search form lives outside the region, so these hidden inputs are tied
+		// to it with the form attribute and refresh with every swap.
+		`name="sort" value="Name"`, `name="dir" value="asc"`, `form="list-search"`,
 		`aria-sort="ascending"`,
 		"Lamp",
 		`href="/admin/products/7/edit"`,
@@ -119,6 +120,34 @@ func TestRecordsRegion(t *testing.T) {
 	if strings.Contains(out, "<html") {
 		t.Error("the region must not include the page frame")
 	}
+	if strings.Contains(out, `role="search"`) || strings.Contains(out, `name="q"`) {
+		t.Error("the search form must not be inside the swapped region: htmx would replace the focused input on every keystroke pause")
+	}
+}
+
+func TestListPageKeepsSearchOutsideTheSwappedRegion(t *testing.T) {
+	out := render(t, ListPage(sampleList()))
+	search := strings.Index(out, `role="search"`)
+	records := strings.Index(out, `id="records"`)
+	if search < 0 || records < 0 || search > records {
+		t.Fatalf("the search form must come before the #records region (search at %d, records at %d)", search, records)
+	}
+	if strings.Contains(out[records:], `role="search"`) {
+		t.Error("a second search form leaked into the region")
+	}
+	mustContain(t, out,
+		`id="list-search"`, `id="search-q"`, `name="q"`,
+		`hx-target="#records"`, `hx-push-url="true"`, `hx-swap="outerHTML"`)
+}
+
+func TestLayoutTellsHtmxToReloadOnHistoryMiss(t *testing.T) {
+	out := render(t, MessagePage(sampleShell(), "Hello", "A message"))
+	mustContain(t, out, `name="htmx-config"`, "refreshOnHistoryMiss")
+}
+
+func TestLoginUsesTheSoftCard(t *testing.T) {
+	out := render(t, LoginPage(LoginView{Brand: "Acme", Prefix: "/admin", Action: "/admin/login"}))
+	mustContain(t, out, `class="card-soft"`)
 }
 
 func TestRecordsWithoutSearchEmptyAndFirstPage(t *testing.T) {

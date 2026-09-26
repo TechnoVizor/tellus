@@ -14,6 +14,7 @@ import (
 
 	"github.com/TechnoVizor/tellus/form"
 	"github.com/TechnoVizor/tellus/internal/i18n"
+	"github.com/TechnoVizor/tellus/internal/secure"
 	"github.com/TechnoVizor/tellus/internal/ui"
 )
 
@@ -46,7 +47,8 @@ type listParams struct {
 // safe default, so a hand-edited URL never breaks the page.
 func (rs *resource[T]) parseList(r *http.Request) listParams {
 	q := r.URL.Query()
-	lp := listParams{Search: truncateRunes(strings.TrimSpace(q.Get("q")), maxSearchRunes), Page: 1}
+	// CleanText: Postgres rejects NUL bytes and invalid UTF-8 in a query.
+	lp := listParams{Search: truncateRunes(strings.TrimSpace(secure.CleanText(q.Get("q"))), maxSearchRunes), Page: 1}
 	if n, err := strconv.Atoi(q.Get("page")); err == nil && n > 1 {
 		lp.Page = min(n, maxPage)
 	}
@@ -327,9 +329,9 @@ func (rs *resource[T]) parseForm(w http.ResponseWriter, r *http.Request) bool {
 	if err := r.ParseForm(); err != nil {
 		var tooBig *http.MaxBytesError
 		if errors.As(err, &tooBig) {
-			http.Error(w, "Request too large", http.StatusRequestEntityTooLarge)
+			http.Error(w, i18n.T("error.too_large"), http.StatusRequestEntityTooLarge)
 		} else {
-			http.Error(w, "Bad request", http.StatusBadRequest)
+			http.Error(w, i18n.T("error.bad_request"), http.StatusBadRequest)
 		}
 		return false
 	}

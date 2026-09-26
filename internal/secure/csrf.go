@@ -6,6 +6,8 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"net/http"
+
+	"github.com/TechnoVizor/tellus/internal/i18n"
 )
 
 // CSRF cookie, request header and form field names.
@@ -47,7 +49,7 @@ func (c CSRF) Middleware(next http.Handler) http.Handler {
 				sent = r.PostFormValue(CSRFField)
 			}
 			if token == "" || subtle.ConstantTimeCompare([]byte(sent), []byte(token)) != 1 {
-				http.Error(w, "invalid CSRF token", http.StatusForbidden)
+				http.Error(w, i18n.T("error.csrf"), http.StatusForbidden)
 				return
 			}
 		}

@@ -12,6 +12,7 @@ import (
 
 	"github.com/TechnoVizor/tellus/internal/humanize"
 	"github.com/TechnoVizor/tellus/internal/i18n"
+	"github.com/TechnoVizor/tellus/internal/secure"
 )
 
 // TextField is a single-line or multi-line text input bound to a string field.
@@ -58,6 +59,9 @@ func (f *TextField) Check(target reflect.Type) error {
 func (f *TextField) Format(v any) string { return fmt.Sprint(v) }
 
 func (f *TextField) Parse(raw string, target reflect.Type) (any, string) {
+	if !secure.ValidText(raw) {
+		return nil, i18n.T("validation.invalid_text")
+	}
 	if f.required && strings.TrimSpace(raw) == "" {
 		return nil, i18n.T("validation.required")
 	}

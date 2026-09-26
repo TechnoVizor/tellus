@@ -41,6 +41,14 @@ func (l *Limiter) Allow(key string) bool {
 	return true
 }
 
+// Reset forgets the events recorded for key, for example after a successful
+// sign-in.
+func (l *Limiter) Reset(key string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	delete(l.hits, key)
+}
+
 func (l *Limiter) prune(key string, now time.Time) {
 	cutoff := now.Add(-l.window)
 	kept := l.hits[key][:0]
