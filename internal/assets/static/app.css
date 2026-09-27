@@ -141,7 +141,7 @@
   .nav a[aria-current="page"] { background: var(--surface-soft); color: var(--ink); }
   .sidebar-foot { display: flex; flex-direction: column; gap: 8px; }
   .user { color: var(--ink-muted); font-size: 13px; padding: 0 12px; overflow-wrap: anywhere; }
-  .main { padding: 40px 40px 64px; max-width: 1200px; width: 100%; }
+  .main { padding: 40px 40px 64px; width: 100%; }
   .page-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
 
   /* buttons */
