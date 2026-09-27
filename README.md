@@ -2,7 +2,7 @@
 
 # Tellus
 
-### A Filament-style admin panel for Go
+### Admin panel for Go
 
 Describe a resource in Go. Get a list with search, sorting and pagination, create and edit forms, sign-in, and a light and dark theme, all in your own binary. No Node, no CDN, no separate frontend to deploy.
 
