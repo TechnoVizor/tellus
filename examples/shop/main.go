@@ -5,7 +5,6 @@ package main
 import (
 	"context"
 	"crypto/rand"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -83,19 +82,45 @@ func main() {
 	log.Fatal(http.ListenAndServe(addr, mux))
 }
 
+// demoProducts gives the demo a catalog that looks real in a screenshot,
+// instead of "Product 01", "Product 02"... Price is a plain integer (dollars):
+// Tellus does not have a Money column type yet, see docs/spec.md section 9.
+var demoProducts = []struct {
+	Name        string
+	Description string
+	Price       int
+	Active      bool
+}{
+	{"Wireless Mouse", "Silent buttons, 2.4 GHz receiver, up to 18 months on two AA batteries.", 25, true},
+	{"Mechanical Keyboard", "Hot-swappable switches, per-key RGB, aluminum top plate.", 90, true},
+	{"USB-C Hub, 7-in-1", "HDMI 4K, two USB-A, SD and microSD, 100W passthrough.", 40, true},
+	{"27-inch 4K Monitor", "IPS panel, 99% sRGB, height and tilt adjustable stand.", 350, true},
+	{"Noise-Cancelling Headphones", "Over-ear, 30-hour battery, USB-C fast charge.", 180, true},
+	{"Webcam, 1080p", "Autofocus, built-in mic, privacy shutter.", 45, false},
+	{"Laptop Stand", "Aluminum, folds flat, fits 11 to 17-inch laptops.", 30, true},
+	{"Desk Lamp with USB Charging", "Three color modes, touch dimmer, two USB-A ports.", 35, true},
+	{"Portable SSD, 1TB", "USB 3.2 Gen 2, up to 1050 MB/s read.", 85, true},
+	{"Wireless Charging Pad", "15W fast charge, works through most cases.", 20, false},
+	{"Mechanical Numpad", "Same switches as the full keyboard, USB-C.", 35, true},
+	{"Cable Organizer Box", "Hides power strips and cable clutter under a desk.", 15, true},
+	{"Standing Desk Converter", "Sits on any desk, spring-assisted lift, two tiers.", 130, true},
+	{"Ergonomic Mouse Pad", "Memory foam wrist rest, stitched edges.", 13, true},
+	{"HDMI Cable, 2m", "4K at 60Hz, braided jacket.", 9, true},
+	{"Bluetooth Speaker", "IPX7 waterproof, 12-hour battery, USB-C.", 60, true},
+	{"Phone Stand, Adjustable", "Aluminum, folds for travel, fits most phones and tablets.", 18, true},
+	{"Desk Mat, Large", "900x400mm, stitched edges, non-slip base.", 23, false},
+	{"Smart Plug", "Wi-Fi, schedules and energy monitoring, no hub required.", 16, true},
+	{"USB Microphone", "Cardioid condenser, plug and play, built-in stand.", 70, true},
+}
+
 func seedProducts(db *gorm.DB) {
 	var n int64
 	db.Model(&Product{}).Count(&n)
 	if n > 0 {
 		return
 	}
-	for i := 1; i <= 45; i++ {
-		db.Create(&Product{
-			Name:        fmt.Sprintf("Product %02d", i),
-			Description: "Sample product for the demo.",
-			Price:       i * 10,
-			Active:      i%3 != 0,
-		})
+	for _, p := range demoProducts {
+		db.Create(&Product{Name: p.Name, Description: p.Description, Price: p.Price, Active: p.Active})
 	}
 }
 
