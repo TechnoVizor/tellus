@@ -196,6 +196,10 @@
   .input[aria-invalid="true"] { border-color: var(--danger); }
   textarea.input { resize: vertical; }
   .field-error { color: var(--danger); font-size: 13px; font-weight: 500; }
+  .field-image-preview {
+    display: block; width: 96px; height: 96px; object-fit: cover;
+    border-radius: var(--radius-control); border: 1px solid var(--hairline); margin-bottom: 8px;
+  }
   .check { display: inline-flex; align-items: center; gap: 10px; font-weight: 500; cursor: pointer; }
   .check input { width: 18px; height: 18px; accent-color: var(--ink); }
   .form-actions { display: flex; gap: 10px; margin-top: 12px; }
@@ -222,6 +226,11 @@
     display: inline-block; padding: 2px 11px; border-radius: var(--radius-pill);
     font-size: 12px; font-weight: 600;
   }
+  .field-thumb {
+    display: block; width: 40px; height: 40px; object-fit: cover;
+    border-radius: 8px; border: 1px solid var(--hairline);
+  }
+  .field-thumb-empty { background: var(--surface-soft); }
   .badge-on { background: var(--ink); color: var(--on-ink); }
   .badge-off { color: var(--ink-muted); border: 1px solid var(--border-strong); }
   .pager {

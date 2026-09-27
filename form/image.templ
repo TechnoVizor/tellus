@@ -1,0 +1,22 @@
+package form
+
+templ imageInput(f *ImageField, v Value) {
+	<div class="field">
+		@fieldLabel(f.name, f.label, f.required)
+		if v.Raw != "" {
+			<img class="field-image-preview" src={ v.Raw } alt=""/>
+		}
+		<input
+			class="input"
+			type="file"
+			accept="image/jpeg,image/png,image/gif,image/webp"
+			id={ "f-" + f.name }
+			name={ f.name }
+			if v.Error != "" {
+				aria-invalid="true"
+				aria-describedby={ "e-" + f.name }
+			}
+		/>
+		@fieldError(f.name, v.Error)
+	</div>
+}

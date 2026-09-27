@@ -311,7 +311,7 @@ func TestOversizedBodyIsRejected(t *testing.T) {
 	h := newHarness(t, Config{})
 	big := url.Values{
 		"email":    {"a@b.co"},
-		"password": {strings.Repeat("x", 2<<20)},
+		"password": {strings.Repeat("x", 10<<20)}, // over the 8 MiB default
 		"_csrf":    {h.csrfToken()},
 	}
 	req, _ := http.NewRequest(http.MethodPost, h.base+"/login", strings.NewReader(big.Encode()))

@@ -3,6 +3,7 @@ package tellus
 import (
 	"errors"
 	"fmt"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -202,8 +203,9 @@ func (rs *resource[T]) create(w http.ResponseWriter, r *http.Request, u User) {
 	if !rs.parseForm(w, r) {
 		return
 	}
+	defer cleanUpload(r)
 	var item T
-	values, valid, err := rs.apply(&item, r.PostForm)
+	values, valid, err := rs.apply(r, &item)
 	if err != nil {
 		rs.panel.serverError(w, err)
 		return
@@ -242,6 +244,7 @@ func (rs *resource[T]) update(w http.ResponseWriter, r *http.Request, u User) {
 	if !rs.parseForm(w, r) {
 		return
 	}
+	defer cleanUpload(r)
 	id := r.PathValue("id")
 	item, err := rs.source.Find(r.Context(), id)
 	if errors.Is(err, ErrNotFound) {
@@ -254,7 +257,7 @@ func (rs *resource[T]) update(w http.ResponseWriter, r *http.Request, u User) {
 	}
 	// Only the declared form fields are copied onto the record, so extra posted
 	// values such as ID or CreatedAt are ignored.
-	values, valid, err := rs.apply(item, r.PostForm)
+	values, valid, err := rs.apply(r, item)
 	if err != nil {
 		rs.panel.serverError(w, err)
 		return
@@ -286,14 +289,38 @@ func (rs *resource[T]) delete(w http.ResponseWriter, r *http.Request, _ User) {
 // apply copies the submitted values of the declared fields onto item. It
 // returns each field's raw input with its validation message and whether every
 // field was valid.
-func (rs *resource[T]) apply(item *T, in url.Values) (map[string]form.Value, bool, error) {
+//
+// A FileField (Image) is handled differently from the rest: its value comes
+// from the uploaded file, not from POST text, and when the request carries no
+// new file for it, the field's current value on item is kept rather than
+// cleared, so editing a record without replacing its photo leaves it alone.
+func (rs *resource[T]) apply(r *http.Request, item *T) (map[string]form.Value, bool, error) {
 	values := make(map[string]form.Value, len(rs.fields))
 	valid := true
 	rv := reflect.ValueOf(item).Elem()
 	for i, f := range rs.fields {
 		name := f.Info().Name
-		raw := in.Get(name)
-		parsed, msg := f.Parse(raw, rs.fieldType[i])
+		var raw string
+		var parsed any
+		var msg string
+
+		if ff, ok := f.(form.FileField); ok {
+			current := rv.FieldByIndex(rs.fieldIdx[i]).Interface()
+			if fh := firstUploadedFile(r, name); fh != nil {
+				parsed, msg = ff.ParseFile(r.Context(), fh, rs.fieldType[i], rs.panel.cfg.Storage)
+				if msg == "" {
+					raw = ff.Format(parsed)
+				} else {
+					raw = ff.Format(current) // rejected upload: keep showing the old image
+				}
+			} else {
+				parsed, raw = current, ff.Format(current)
+			}
+		} else {
+			raw = r.PostForm.Get(name)
+			parsed, msg = f.Parse(raw, rs.fieldType[i])
+		}
+
 		values[name] = form.Value{Raw: raw, Error: msg}
 		if msg != "" {
 			valid = false
@@ -306,6 +333,28 @@ func (rs *resource[T]) apply(item *T, in url.Values) (map[string]form.Value, boo
 		rv.FieldByIndex(rs.fieldIdx[i]).Set(pv)
 	}
 	return values, valid, nil
+}
+
+// firstUploadedFile returns the first file posted for name, or nil when the
+// request has no multipart body or no file was chosen for that field.
+func firstUploadedFile(r *http.Request, name string) *multipart.FileHeader {
+	if r.MultipartForm == nil {
+		return nil
+	}
+	fhs := r.MultipartForm.File[name]
+	if len(fhs) == 0 {
+		return nil
+	}
+	return fhs[0]
+}
+
+// cleanUpload removes any temporary files a multipart parse spilled to disk.
+// Uploads under Config.MaxBodyBytes normally stay in memory, so this is
+// usually a no-op; it exists for hosts that raise the limit.
+func cleanUpload(r *http.Request) {
+	if r.MultipartForm != nil {
+		r.MultipartForm.RemoveAll()
+	}
 }
 
 func (rs *resource[T]) renderForm(w http.ResponseWriter, r *http.Request, u User, status int, heading, action string, values map[string]form.Value, summary string) {
@@ -323,10 +372,20 @@ func (rs *resource[T]) renderForm(w http.ResponseWriter, r *http.Request, u User
 	}))
 }
 
-// parseForm parses the request body. It answers the client itself and returns
-// false when the body is unreadable or over the size limit.
+// maxMultipartMemory bounds how much of a multipart body ParseMultipartForm
+// keeps in memory before spilling the rest to temporary files. It matches the
+// default MaxBodyBytes, so uploads within the default limit never touch disk;
+// a host that raises MaxBodyBytes may see files spill, cleaned up by
+// cleanUpload after the request.
+const maxMultipartMemory = defaultMaxBodyBytes
+
+// parseForm parses the request body, files included. It answers the client
+// itself and returns false when the body is unreadable or over the size
+// limit. A request that is not multipart (no Image field was submitted) is
+// parsed as an ordinary form, not an error.
 func (rs *resource[T]) parseForm(w http.ResponseWriter, r *http.Request) bool {
-	if err := r.ParseForm(); err != nil {
+	err := r.ParseMultipartForm(maxMultipartMemory)
+	if err != nil && !errors.Is(err, http.ErrNotMultipart) {
 		var tooBig *http.MaxBytesError
 		if errors.As(err, &tooBig) {
 			http.Error(w, i18n.T("error.too_large"), http.StatusRequestEntityTooLarge)

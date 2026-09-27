@@ -17,6 +17,7 @@ type Product struct {
 	Name      string
 	Price     int
 	Active    bool
+	Photo     string // an image URL, empty when the product has none
 	CreatedAt time.Time
 }
 

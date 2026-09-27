@@ -155,6 +155,7 @@ func (b *ResourceBuilder[T]) register(p *Panel) error {
 	}
 
 	seen := map[string]bool{}
+	needsStorage := false
 	for _, f := range b.fields {
 		info := f.Info()
 		if seen[info.Name] {
@@ -168,9 +169,17 @@ func (b *ResourceBuilder[T]) register(p *Panel) error {
 		if err := f.Check(sf.Type); err != nil {
 			return fmt.Errorf("tellus: resource %q: %w", rs.slug, err)
 		}
+		if _, ok := f.(form.FileField); ok {
+			needsStorage = true
+		}
 		rs.fields = append(rs.fields, f)
 		rs.fieldIdx = append(rs.fieldIdx, sf.Index)
 		rs.fieldType = append(rs.fieldType, sf.Type)
+	}
+	if needsStorage {
+		if err := p.ensureStorage(); err != nil {
+			return fmt.Errorf("tellus: resource %q: %w", rs.slug, err)
+		}
 	}
 
 	p.slugs[rs.slug] = true

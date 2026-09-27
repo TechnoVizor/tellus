@@ -1,0 +1,9 @@
+package table
+
+templ imageCell(url string) {
+	if url != "" {
+		<img class="field-thumb" src={ url } alt="" loading="lazy"/>
+	} else {
+		<span class="field-thumb field-thumb-empty" aria-hidden="true"></span>
+	}
+}

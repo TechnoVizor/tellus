@@ -8,6 +8,9 @@
 .env.*
 *.log
 
+# uploaded files (LocalStorage's default directory)
+tellus-uploads/
+
 # editors
 .idea/
 .vscode/

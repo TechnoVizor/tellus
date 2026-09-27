@@ -13,7 +13,7 @@ templ FormPage(v FormView) {
 				if v.Error != "" {
 					<p class="alert" role="alert">{ v.Error }</p>
 				}
-				<form method="post" action={ templ.SafeURL(v.Action) } novalidate>
+				<form method="post" action={ templ.SafeURL(v.Action) } enctype="multipart/form-data" novalidate>
 					<input type="hidden" name="_csrf" value={ v.Shell.CSRF }/>
 					for _, field := range v.Fields {
 						@field

@@ -24,6 +24,7 @@ type Product struct {
 	Description string
 	Price       int
 	Active      bool
+	Photo       string
 	CreatedAt   time.Time
 }
 
@@ -57,11 +58,13 @@ func main() {
 	if err := panel.Register(
 		tellus.Resource[Product](db).
 			Table(
+				table.Image("Photo"),
 				table.Text("Name").Searchable().Sortable(),
 				table.Text("Price").Sortable(),
 				table.Boolean("Active"),
 			).
 			Form(
+				form.Image("Photo"),
 				form.Text("Name").Required().MaxLength(100),
 				form.Textarea("Description"),
 				form.Number("Price").Required(),

@@ -22,13 +22,15 @@ import (
 )
 
 const (
-	sessionCookie  = "tellus_session"
-	maxBodyBytes   = 1 << 20 // form posts above 1 MiB are rejected
-	loginAttempts  = 10
-	loginWindow    = 10 * time.Minute
-	defaultPrefix  = "/admin"
-	defaultName    = "Tellus"
-	defaultSession = 12 * time.Hour
+	sessionCookie       = "tellus_session"
+	defaultMaxBodyBytes = 8 << 20 // comfortably fits one image upload plus its other fields
+	loginAttempts       = 10
+	loginWindow         = 10 * time.Minute
+	defaultPrefix       = "/admin"
+	defaultName         = "Tellus"
+	defaultSession      = 12 * time.Hour
+	defaultUploadDir    = "tellus-uploads"
+	defaultUploadURL    = "/uploads"
 )
 
 var prefixPattern = regexp.MustCompile(`^/[A-Za-z0-9._~-]+(/[A-Za-z0-9._~-]+)*$`)
@@ -50,6 +52,14 @@ type Config struct {
 	// InsecureCookies drops the Secure cookie attribute so the panel works over
 	// plain http. For local development only.
 	InsecureCookies bool
+	// Storage saves the files an Image field uploads and reports the URL a
+	// browser fetches them from. Default: a *LocalStorage under
+	// "./tellus-uploads", served at "/uploads" by Mount, created only if a
+	// registered resource has an Image field.
+	Storage Storage
+	// MaxBodyBytes caps a request body, including a multipart upload. Default
+	// 8 MiB. Raise it if you need larger uploads.
+	MaxBodyBytes int64
 }
 
 // Panel is the admin panel. Create it with New, add resources with Register,
@@ -98,6 +108,9 @@ func New(cfg Config) (*Panel, error) {
 	if cfg.SessionTTL <= 0 {
 		cfg.SessionTTL = defaultSession
 	}
+	if cfg.MaxBodyBytes <= 0 {
+		cfg.MaxBodyBytes = defaultMaxBodyBytes
+	}
 	return &Panel{
 		cfg:     cfg,
 		prefix:  prefix,
@@ -144,8 +157,32 @@ func (p *Panel) Handler() http.Handler {
 	return p.handler
 }
 
-// Mount registers the panel on mux at its prefix.
-func (p *Panel) Mount(mux *http.ServeMux) { mux.Handle(p.prefix+"/", p.Handler()) }
+// Mount registers the panel on mux at its prefix. When a resource has an
+// Image field and Config.Storage is left at its default, this also serves the
+// uploaded files at their configured URL, outside the panel prefix and
+// without requiring sign-in, the way a storefront's product photos need to be
+// reachable by shoppers.
+func (p *Panel) Mount(mux *http.ServeMux) {
+	mux.Handle(p.prefix+"/", p.Handler())
+	if ls, ok := p.cfg.Storage.(*LocalStorage); ok {
+		mux.Handle("GET "+ls.urlPrefix+"/", http.StripPrefix(ls.urlPrefix+"/", ls.Handler()))
+	}
+}
+
+// ensureStorage lazily creates the default local storage the first time a
+// registered resource needs one, so a panel with no Image fields never touches
+// the filesystem. Called from Register, which already holds p.mu.
+func (p *Panel) ensureStorage() error {
+	if p.cfg.Storage != nil {
+		return nil
+	}
+	s, err := NewLocalStorage(defaultUploadDir, defaultUploadURL)
+	if err != nil {
+		return err
+	}
+	p.cfg.Storage = s
+	return nil
+}
 
 func (p *Panel) build() http.Handler {
 	app := http.NewServeMux()
@@ -157,7 +194,7 @@ func (p *Panel) build() http.Handler {
 		mount(app)
 	}
 
-	guarded := securityHeaders(limitBody(p.csrf.Middleware(app)))
+	guarded := securityHeaders(p.limitBody(p.csrf.Middleware(app)))
 	outer := http.NewServeMux()
 	outer.Handle("GET /assets/", http.StripPrefix("/assets/", assets.Handler()))
 	outer.Handle("/", guarded)
@@ -212,10 +249,10 @@ func securityHeaders(next http.Handler) http.Handler {
 	})
 }
 
-func limitBody(next http.Handler) http.Handler {
+func (p *Panel) limitBody(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Body != nil {
-			r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
+			r.Body = http.MaxBytesReader(w, r.Body, p.cfg.MaxBodyBytes)
 		}
 		next.ServeHTTP(w, r)
 	})

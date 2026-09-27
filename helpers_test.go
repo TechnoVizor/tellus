@@ -1,8 +1,10 @@
 package tellus
 
 import (
+	"bytes"
 	"context"
 	"io"
+	"mime/multipart"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
@@ -182,6 +184,42 @@ func (h *harness) post(path string, v url.Values, headers ...string) result {
 	}
 	v.Set("_csrf", h.csrfToken())
 	return h.postRaw(path, v, headers...)
+}
+
+// postMultipart submits a multipart/form-data request with a valid CSRF
+// token, the way a form with an Image field does. Pass fileField == "" to
+// submit no file at all, the way editing a record without replacing its
+// image does.
+func (h *harness) postMultipart(path string, fields map[string]string, fileField, filename string, content []byte) result {
+	h.t.Helper()
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	if err := w.WriteField("_csrf", h.csrfToken()); err != nil {
+		h.t.Fatal(err)
+	}
+	for k, v := range fields {
+		if err := w.WriteField(k, v); err != nil {
+			h.t.Fatal(err)
+		}
+	}
+	if fileField != "" {
+		part, err := w.CreateFormFile(fileField, filename)
+		if err != nil {
+			h.t.Fatal(err)
+		}
+		if _, err := part.Write(content); err != nil {
+			h.t.Fatal(err)
+		}
+	}
+	if err := w.Close(); err != nil {
+		h.t.Fatal(err)
+	}
+	req, err := http.NewRequest(http.MethodPost, h.base+path, &buf)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	return h.do(req)
 }
 
 // postRaw submits a form exactly as given.

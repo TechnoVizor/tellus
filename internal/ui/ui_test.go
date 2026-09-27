@@ -185,5 +185,5 @@ func TestFormPage(t *testing.T) {
 	mustContain(t, out,
 		"<h1>New Product</h1>", `role="alert"`, "Some fields need attention.",
 		`action="/admin/products"`, `name="_csrf" value="tok123"`, `<input name="Name">`,
-		"Save", "Cancel", `novalidate`)
+		"Save", "Cancel", `novalidate`, `enctype="multipart/form-data"`)
 }
