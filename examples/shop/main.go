@@ -8,12 +8,14 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
 	"github.com/TechnoVizor/tellus"
+	"github.com/TechnoVizor/tellus/dashboard"
 	"github.com/TechnoVizor/tellus/form"
 	"github.com/TechnoVizor/tellus/table"
 )
@@ -92,6 +94,34 @@ func main() {
 			Form(
 				form.Text("Name").Required().MaxLength(100),
 			),
+	); err != nil {
+		log.Fatal(err)
+	}
+
+	if err := panel.Dashboard(
+		dashboard.Stat("Products").Icon(boxIcon).Href(panel.Prefix()+"/products").
+			Value(func(ctx context.Context) (string, error) { return countOf(ctx, db, &Product{}) }),
+		dashboard.Stat("Categories").Icon(tagIcon).Href(panel.Prefix()+"/categories").
+			Value(func(ctx context.Context) (string, error) { return countOf(ctx, db, &Category{}) }),
+		dashboard.Stat("Active products").Icon(boltIcon).
+			Value(func(ctx context.Context) (string, error) {
+				var n int64
+				err := db.WithContext(ctx).Model(&Product{}).Where("active = ?", true).Count(&n).Error
+				return strconv.FormatInt(n, 10), err
+			}).
+			Trend(func(ctx context.Context) (float64, bool, error) {
+				var active, total int64
+				if err := db.WithContext(ctx).Model(&Product{}).Where("active = ?", true).Count(&active).Error; err != nil {
+					return 0, false, err
+				}
+				if err := db.WithContext(ctx).Model(&Product{}).Count(&total).Error; err != nil {
+					return 0, false, err
+				}
+				if total == 0 {
+					return 0, true, nil
+				}
+				return float64(active) / float64(total) * 100, active*2 >= total, nil
+			}),
 	); err != nil {
 		log.Fatal(err)
 	}
@@ -234,3 +264,18 @@ func env(key, fallback string) string {
 	}
 	return fallback
 }
+
+// countOf is the dashboard Stat widgets' shared "how many rows" value function.
+func countOf(ctx context.Context, db *gorm.DB, model any) (string, error) {
+	var n int64
+	err := db.WithContext(ctx).Model(model).Count(&n).Error
+	return strconv.FormatInt(n, 10), err
+}
+
+// Icons are inline so the example has no static-file dependency; a real
+// host would more likely load these from its own asset pipeline.
+const (
+	boxIcon  = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>`
+	tagIcon  = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41L11 3.83A2 2 0 0 0 9.59 3.24L3 3v6.59a2 2 0 0 0 .59 1.41l9.58 9.58a2 2 0 0 0 2.82 0l4.6-4.6a2 2 0 0 0 0-2.82z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>`
+	boltIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h7v8l10-12h-7z"/></svg>`
+)
