@@ -195,6 +195,13 @@
   }
   .input[aria-invalid="true"] { border-color: var(--danger); }
   textarea.input { resize: vertical; }
+  .input[type="file"] { padding: 8px 10px; }
+  .input[type="file"]::file-selector-button {
+    margin-right: 12px; padding: 7px 14px; border: none; border-radius: var(--radius-pill);
+    background: var(--ink); color: var(--on-ink); font: inherit; font-weight: 500; font-size: 13px;
+    cursor: pointer; transition: background-color 0.15s var(--ease);
+  }
+  .input[type="file"]::file-selector-button:hover { background: var(--ink-hover); }
   .field-error { color: var(--danger); font-size: 13px; font-weight: 500; }
   .field-image-preview {
     display: block; width: 96px; height: 96px; object-fit: cover;
@@ -203,7 +210,7 @@
   .check { display: inline-flex; align-items: center; gap: 10px; font-weight: 500; cursor: pointer; }
   .check input { width: 18px; height: 18px; accent-color: var(--ink); }
   .form-actions { display: flex; gap: 10px; margin-top: 12px; }
-  .form-narrow { max-width: 640px; }
+  .page-narrow { max-width: 640px; margin-inline: auto; }
 
   /* date picker */
   [x-cloak] { display: none !important; }
