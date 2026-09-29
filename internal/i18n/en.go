@@ -34,6 +34,7 @@ var en = map[string]string{
 	"ui.toggle_theme": "Switch between light and dark theme",
 	"ui.sign_out":     "Sign out",
 	"ui.no_resources": "No resources are registered yet.",
+	"ui.dashboard":    "Dashboard",
 
 	// login
 	"login.title":     "Sign in",

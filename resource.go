@@ -1,6 +1,7 @@
 package tellus
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"regexp"
@@ -196,6 +197,18 @@ func (b *ResourceBuilder[T]) register(p *Panel) error {
 
 	p.slugs[rs.slug] = true
 	p.nav = append(p.nav, navEntry{slug: rs.slug, label: rs.plural})
+	p.dashboardCards = append(p.dashboardCards, dashboardCard{
+		label: rs.plural,
+		href:  p.url("/" + rs.slug),
+		countFn: func(ctx context.Context) (int64, error) {
+			res, err := rs.source.List(ctx, ListQuery{PerPage: 1})
+			if err != nil {
+				return 0, err
+			}
+			return res.Total, nil
+		},
+		seriesFn: resolveTimeSeries(b.db, model),
+	})
 	p.mounters = append(p.mounters, rs.mount)
 	return nil
 }

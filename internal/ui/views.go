@@ -88,3 +88,19 @@ type FormView struct {
 	Error     string // summary shown above the fields, empty when none
 	Fields    []templ.Component
 }
+
+// DashboardCardView is one resource's stat card on the dashboard.
+type DashboardCardView struct {
+	Label      string
+	Href       string
+	Count      int64
+	HasSeries  bool
+	SeriesJSON string // uPlot's own data shape, [xs[], ys[]]; ignored when HasSeries is false
+}
+
+// DashboardView is the data of the dashboard home page.
+type DashboardView struct {
+	Shell   Shell
+	Heading string
+	Cards   []DashboardCardView
+}

@@ -87,11 +87,105 @@ func TestRegisterRejectsDuplicateSlug(t *testing.T) {
 	}
 }
 
-func TestHomeRedirectsToFirstResource(t *testing.T) {
-	h := loggedIn(t, newMemSource(1))
+func TestHomeRendersDashboard(t *testing.T) {
+	h := loggedIn(t, newMemSource(3))
 	res := h.get("/")
-	if res.status != http.StatusSeeOther || res.location() != "/admin/products" {
-		t.Fatalf("home: %d %q", res.status, res.location())
+	if res.status != http.StatusOK {
+		t.Fatalf("status %d", res.status)
+	}
+	mustContain(t, res.body, "Dashboard", "Product", "3")
+	if strings.Contains(res.body, "data-series") {
+		t.Error("a resource on a custom DataSource has no *gorm.DB, so it must have no chart")
+	}
+}
+
+func TestHomeWithNoResourcesShowsMessage(t *testing.T) {
+	h := newHarness(t, Config{})
+	h.loginAdmin()
+	res := h.get("/")
+	if res.status != http.StatusOK {
+		t.Fatalf("status %d", res.status)
+	}
+	mustContain(t, res.body, "No resources are registered yet.")
+}
+
+func TestHomeCountErrorIsServerError(t *testing.T) {
+	src := newMemSource(1)
+	src.failWith = errBoom
+	h := loggedIn(t, src)
+	res := h.get("/")
+	if res.status != http.StatusInternalServerError {
+		t.Fatalf("status %d", res.status)
+	}
+	if strings.Contains(res.body, "boom") || strings.Contains(res.body, "secret") {
+		t.Error("internal error text leaked to the client")
+	}
+}
+
+func TestDashboardNavActiveOnlyOnDashboard(t *testing.T) {
+	h := loggedIn(t, newMemSource(1))
+	navOf := func(body string) string {
+		start, end := strings.Index(body, "<nav"), strings.Index(body, "</nav>")
+		if start < 0 || end < 0 {
+			return ""
+		}
+		return body[start:end]
+	}
+	home := navOf(h.get("/").body)
+	if !strings.Contains(home, `aria-current="page">Dashboard`) {
+		t.Errorf("dashboard nav not active on home: %s", home)
+	}
+	list := navOf(h.get("/products").body)
+	if strings.Contains(list, `aria-current="page">Dashboard`) {
+		t.Errorf("dashboard nav must not be active on a resource page: %s", list)
+	}
+	if !strings.Contains(list, `aria-current="page">Products`) {
+		t.Errorf("products nav not active on its own page: %s", list)
+	}
+}
+
+// noteSource is an in-memory DataSource[Note], used only to register a
+// second resource alongside Product for the dashboard's card-order test.
+// Only List is exercised (through countFn); everything else panics, the
+// same relStubSource convention relation_test.go already uses.
+type noteSource struct{ items []Note }
+
+func newNoteSource() *noteSource { return &noteSource{items: []Note{{ID: 1, Body: "x"}}} }
+
+func (s *noteSource) List(context.Context, ListQuery) (ListResult[Note], error) {
+	return ListResult[Note]{Items: s.items, Total: int64(len(s.items))}, nil
+}
+func (s *noteSource) Find(context.Context, string) (*Note, error) { panic("unused") }
+func (s *noteSource) Create(context.Context, *Note) error         { panic("unused") }
+func (s *noteSource) Update(context.Context, *Note) error         { panic("unused") }
+func (s *noteSource) Delete(context.Context, string) error        { panic("unused") }
+func (s *noteSource) ID(*Note) string                             { panic("unused") }
+
+func TestDashboardCardOrderMatchesRegistration(t *testing.T) {
+	cat := Resource[Note](nil).Source(newNoteSource()).
+		Table(table.Text("Body")).
+		Form(form.Text("Body").Required())
+	prod := productResource(newMemSource(1))
+	h := newHarness(t, Config{}, cat, prod)
+	h.loginAdmin()
+	body := h.get("/").body
+	notesIdx, productsIdx := strings.Index(body, "Notes"), strings.Index(body, "Products")
+	if notesIdx < 0 || productsIdx < 0 || notesIdx > productsIdx {
+		t.Errorf("cards must appear in registration order (Notes then Products): %s", body)
+	}
+}
+
+func TestDashboardCountsAreFreshPerRequest(t *testing.T) {
+	src := newMemSource(1)
+	h := loggedIn(t, src)
+	first := h.get("/").body
+	if !strings.Contains(first, ">1<") {
+		t.Fatalf("expected a count of 1: %s", first)
+	}
+	src.items = append(src.items, Product{ID: 99, Name: "New"})
+	second := h.get("/").body
+	if !strings.Contains(second, ">2<") {
+		t.Errorf("count did not refresh after the source changed: %s", second)
 	}
 }
 

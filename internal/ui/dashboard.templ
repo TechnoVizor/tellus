@@ -1,0 +1,24 @@
+package ui
+
+import "strconv"
+
+templ DashboardPage(v DashboardView) {
+	@Layout(v.Shell) {
+		<div class="page-head">
+			<h1>{ v.Heading }</h1>
+		</div>
+		<div class="dashboard-grid">
+			for _, c := range v.Cards {
+				<a class="card dashboard-card" href={ templ.SafeURL(c.Href) }>
+					<div class="card-body">
+						<div class="muted">{ c.Label }</div>
+						<div class="stat-value">{ strconv.FormatInt(c.Count, 10) }</div>
+						if c.HasSeries {
+							<div class="dashboard-chart" data-series={ c.SeriesJSON }></div>
+						}
+					</div>
+				</a>
+			}
+		</div>
+	}
+}

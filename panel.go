@@ -31,6 +31,7 @@ const (
 	defaultSession      = 12 * time.Hour
 	defaultUploadDir    = "tellus-uploads"
 	defaultUploadURL    = "/uploads"
+	dashboardDays       = 30
 )
 
 var prefixPattern = regexp.MustCompile(`^/[A-Za-z0-9._~-]+(/[A-Za-z0-9._~-]+)*$`)
@@ -72,12 +73,13 @@ type Panel struct {
 	limiter *secure.Limiter
 	now     func() time.Time
 
-	mu       sync.Mutex
-	built    bool
-	handler  http.Handler
-	nav      []navEntry
-	slugs    map[string]bool
-	mounters []func(*http.ServeMux)
+	mu             sync.Mutex
+	built          bool
+	handler        http.Handler
+	nav            []navEntry
+	slugs          map[string]bool
+	mounters       []func(*http.ServeMux)
+	dashboardCards []dashboardCard
 }
 
 type navEntry struct{ slug, label string }
@@ -354,7 +356,10 @@ func (p *Panel) serverError(w http.ResponseWriter, err error) {
 }
 
 func (p *Panel) shell(r *http.Request, u User, title, activeSlug string) ui.Shell {
-	nav := make([]ui.NavItem, 0, len(p.nav))
+	nav := make([]ui.NavItem, 0, len(p.nav)+1)
+	if len(p.dashboardCards) > 0 {
+		nav = append(nav, ui.NavItem{Label: i18n.T("ui.dashboard"), Href: p.url("/"), Active: activeSlug == ""})
+	}
 	for _, e := range p.nav {
 		nav = append(nav, ui.NavItem{Label: e.label, Href: p.url("/" + e.slug), Active: e.slug == activeSlug})
 	}
@@ -375,9 +380,32 @@ func (p *Panel) renderMessage(w http.ResponseWriter, r *http.Request, u User, st
 // --- pages ---
 
 func (p *Panel) home(w http.ResponseWriter, r *http.Request, u User) {
-	if len(p.nav) > 0 {
-		http.Redirect(w, r, p.url("/"+p.nav[0].slug), http.StatusSeeOther)
+	if len(p.dashboardCards) == 0 {
+		p.renderMessage(w, r, u, http.StatusOK, p.cfg.Name, i18n.T("ui.no_resources"))
 		return
 	}
-	p.renderMessage(w, r, u, http.StatusOK, p.cfg.Name, i18n.T("ui.no_resources"))
+	cards := make([]ui.DashboardCardView, len(p.dashboardCards))
+	for i, c := range p.dashboardCards {
+		count, err := c.countFn(r.Context())
+		if err != nil {
+			p.serverError(w, err)
+			return
+		}
+		cv := ui.DashboardCardView{Label: c.label, Href: c.href, Count: count}
+		if c.seriesFn != nil {
+			series, err := c.seriesFn(r.Context(), dashboardDays)
+			if err != nil {
+				p.serverError(w, err)
+				return
+			}
+			cv.HasSeries = true
+			cv.SeriesJSON = sparklineJSON(series, dashboardDays)
+		}
+		cards[i] = cv
+	}
+	p.render(w, r, http.StatusOK, ui.DashboardPage(ui.DashboardView{
+		Shell:   p.shell(r, u, i18n.T("ui.dashboard"), ""),
+		Heading: i18n.T("ui.dashboard"),
+		Cards:   cards,
+	}))
 }

@@ -3,11 +3,15 @@ package tellus
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/TechnoVizor/tellus/form"
 	"github.com/TechnoVizor/tellus/internal/testdb"
+	"github.com/TechnoVizor/tellus/table"
 )
 
 // dashActivity and dashNoTimestamp are fixtures dedicated to dashboard
@@ -136,5 +140,74 @@ func TestSparklineJSONFillsGapsAndKeepsRealCounts(t *testing.T) {
 		if ys[i] != 0 {
 			t.Errorf("day %d should be zero-filled, got %d", i, ys[i])
 		}
+	}
+}
+
+func TestDashboardPageRendersRealSeries(t *testing.T) {
+	db := testdb.Open(t)
+	if err := db.AutoMigrate(&dashActivity{}); err != nil {
+		t.Fatal(err)
+	}
+	today := time.Now()
+	db.Create(&dashActivity{Name: "a", CreatedAt: today})
+	db.Create(&dashActivity{Name: "b", CreatedAt: today})
+	db.Create(&dashActivity{Name: "c", CreatedAt: today.AddDate(0, 0, -10)})
+
+	res := Resource[dashActivity](db).Slug("activity").
+		Table(table.Text("Name")).
+		Form(form.Text("Name").Required())
+	h := newHarness(t, Config{}, res)
+	h.loginAdmin()
+
+	result := h.get("/")
+	if result.status != http.StatusOK {
+		t.Fatalf("status %d", result.status)
+	}
+	body := result.body
+	i := strings.Index(body, `data-series="`)
+	if i < 0 {
+		t.Fatal("missing data-series attribute")
+	}
+	rest := body[i+len(`data-series="`):]
+	j := strings.Index(rest, `"`)
+	if j < 0 {
+		t.Fatal("unterminated data-series attribute")
+	}
+	var decoded [2][]int64
+	if err := json.Unmarshal([]byte(rest[:j]), &decoded); err != nil {
+		t.Fatalf("decode %q: %v", rest[:j], err)
+	}
+	xs, ys := decoded[0], decoded[1]
+	if len(xs) != 30 || len(ys) != 30 {
+		t.Fatalf("lengths = %d, %d, want 30, 30", len(xs), len(ys))
+	}
+	if ys[29] != 2 {
+		t.Errorf("today's count (index 29) = %d, want 2", ys[29])
+	}
+	if ys[19] != 1 {
+		t.Errorf("10-days-ago count (index 19 = 29-10) = %d, want 1", ys[19])
+	}
+}
+
+func TestHomeSeriesErrorIsServerError(t *testing.T) {
+	db := testdb.Open(t)
+	if err := db.AutoMigrate(&dashActivity{}); err != nil {
+		t.Fatal(err)
+	}
+	res := Resource[dashActivity](db).Slug("activity").
+		Table(table.Text("Name")).
+		Form(form.Text("Name").Required())
+	h := newHarness(t, Config{}, res)
+	h.loginAdmin()
+
+	if err := db.Migrator().DropTable(&dashActivity{}); err != nil {
+		t.Fatal(err)
+	}
+	result := h.get("/")
+	if result.status != http.StatusInternalServerError {
+		t.Fatalf("status %d, want 500", result.status)
+	}
+	if !strings.Contains(result.body, "Something went wrong on our side") {
+		t.Errorf("expected the generic server-error message, got: %s", result.body)
 	}
 }

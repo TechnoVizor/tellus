@@ -22,6 +22,27 @@ function weekdayLabels() {
   return labels;
 }
 
+function initDashboardCharts() {
+  var ink = getComputedStyle(document.documentElement).getPropertyValue("--ink").trim();
+  document.querySelectorAll(".dashboard-chart").forEach(function (el) {
+    el.replaceChildren(); // clear a previous draw, so a theme change can redraw cleanly
+    var data = JSON.parse(el.dataset.series);
+    new uPlot(
+      {
+        width: el.clientWidth,
+        height: 60,
+        series: [{}, { stroke: ink, width: 2, fill: ink + "22" }],
+        axes: [{ show: false }, { show: false }],
+        legend: { show: false },
+        cursor: { show: false },
+      },
+      data,
+      el
+    );
+  });
+}
+document.addEventListener("DOMContentLoaded", initDashboardCharts);
+
 document.addEventListener("alpine:init", function () {
   Alpine.data("themeToggle", function () {
     return {
@@ -35,6 +56,7 @@ document.addEventListener("alpine:init", function () {
         try {
           localStorage.setItem("tellus-theme", next);
         } catch (e) {}
+        initDashboardCharts();
       },
     };
   });
