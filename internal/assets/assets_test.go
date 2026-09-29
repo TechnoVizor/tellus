@@ -32,11 +32,18 @@ func TestServesCSSAndJSWithExplicitTypes(t *testing.T) {
 }
 
 func TestVendoredLibrariesAreReallyEmbedded(t *testing.T) {
-	for _, name := range []string{"/htmx.min.js", "/alpine.min.js"} {
+	for _, name := range []string{"/htmx.min.js", "/alpine.min.js", "/uPlot.iife.min.js"} {
 		rec := get(t, name)
 		if rec.Code != http.StatusOK || rec.Body.Len() < 10_000 {
 			t.Errorf("%s: status %d, %d bytes", name, rec.Code, rec.Body.Len())
 		}
+	}
+}
+
+func TestUPlotCSSIsEmbedded(t *testing.T) {
+	rec := get(t, "/uPlot.min.css")
+	if rec.Code != http.StatusOK || rec.Body.Len() < 500 {
+		t.Errorf("uPlot.min.css: status %d, %d bytes", rec.Code, rec.Body.Len())
 	}
 }
 
