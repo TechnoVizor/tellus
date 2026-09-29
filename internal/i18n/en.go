@@ -36,6 +36,9 @@ var en = map[string]string{
 	"ui.no_resources": "No resources are registered yet.",
 	"ui.dashboard":    "Dashboard",
 
+	"dashboard.trend_up":   "Trending up",
+	"dashboard.trend_down": "Trending down",
+
 	// login
 	"login.title":     "Sign in",
 	"login.lede":      "Sign in to continue.",

@@ -104,3 +104,13 @@ type DashboardView struct {
 	Heading string
 	Cards   []DashboardCardView
 }
+
+// WidgetDashboardView is the data of the host-configured dashboard home
+// page (Panel.Dashboard). Each Widgets entry is already fully rendered by
+// its own dashboard.Widget implementation; this view does no rendering of
+// its own beyond placing them in the grid.
+type WidgetDashboardView struct {
+	Shell   Shell
+	Heading string
+	Widgets []templ.Component
+}

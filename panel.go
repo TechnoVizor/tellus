@@ -15,6 +15,7 @@ import (
 
 	"github.com/a-h/templ"
 
+	"github.com/TechnoVizor/tellus/dashboard"
 	"github.com/TechnoVizor/tellus/internal/assets"
 	"github.com/TechnoVizor/tellus/internal/i18n"
 	"github.com/TechnoVizor/tellus/internal/secure"
@@ -73,13 +74,14 @@ type Panel struct {
 	limiter *secure.Limiter
 	now     func() time.Time
 
-	mu             sync.Mutex
-	built          bool
-	handler        http.Handler
-	nav            []navEntry
-	slugs          map[string]bool
-	mounters       []func(*http.ServeMux)
-	dashboardCards []dashboardCard
+	mu               sync.Mutex
+	built            bool
+	handler          http.Handler
+	nav              []navEntry
+	slugs            map[string]bool
+	mounters         []func(*http.ServeMux)
+	dashboardCards   []dashboardCard
+	dashboardWidgets []dashboard.Widget
 }
 
 type navEntry struct{ slug, label string }
@@ -144,6 +146,28 @@ func (p *Panel) Register(resources ...Registrable) error {
 			return err
 		}
 	}
+	return nil
+}
+
+// Dashboard sets the dashboard home page's widgets, in the order given.
+// Calling it at all replaces the automatic per-resource dashboard that
+// otherwise renders on its own; a panel that never calls Dashboard keeps
+// that automatic behavior. Call it before Handler, the same rule Register
+// already follows.
+func (p *Panel) Dashboard(widgets ...dashboard.Widget) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.built {
+		return errors.New("tellus: Dashboard must be called before Handler")
+	}
+	for _, w := range widgets {
+		if vw, ok := w.(dashboard.Validated); ok {
+			if err := vw.Validate(); err != nil {
+				return fmt.Errorf("tellus: %w", err)
+			}
+		}
+	}
+	p.dashboardWidgets = widgets
 	return nil
 }
 
@@ -380,6 +404,23 @@ func (p *Panel) renderMessage(w http.ResponseWriter, r *http.Request, u User, st
 // --- pages ---
 
 func (p *Panel) home(w http.ResponseWriter, r *http.Request, u User) {
+	if len(p.dashboardWidgets) > 0 {
+		comps := make([]templ.Component, len(p.dashboardWidgets))
+		for i, wg := range p.dashboardWidgets {
+			c, err := wg.Render(r.Context())
+			if err != nil {
+				p.serverError(w, err)
+				return
+			}
+			comps[i] = c
+		}
+		p.render(w, r, http.StatusOK, ui.WidgetDashboardPage(ui.WidgetDashboardView{
+			Shell:   p.shell(r, u, i18n.T("ui.dashboard"), ""),
+			Heading: i18n.T("ui.dashboard"),
+			Widgets: comps,
+		}))
+		return
+	}
 	if len(p.dashboardCards) == 0 {
 		p.renderMessage(w, r, u, http.StatusOK, p.cfg.Name, i18n.T("ui.no_resources"))
 		return

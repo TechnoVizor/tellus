@@ -22,3 +22,16 @@ templ DashboardPage(v DashboardView) {
 		</div>
 	}
 }
+
+templ WidgetDashboardPage(v WidgetDashboardView) {
+	@Layout(v.Shell) {
+		<div class="page-head">
+			<h1>{ v.Heading }</h1>
+		</div>
+		<div class="dashboard-grid">
+			for _, w := range v.Widgets {
+				@w
+			}
+		</div>
+	}
+}
