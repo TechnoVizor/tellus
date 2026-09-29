@@ -35,3 +35,33 @@ type Field interface {
 	// Render draws the label, the input and the error message.
 	Render(v Value) templ.Component
 }
+
+// Option is one entry of a select whose choices come from outside the
+// field itself, for example a belongsTo relation's rows.
+type Option struct{ Value, Label string }
+
+// OptionsField is implemented by a field whose Render needs option data
+// only the panel can supply. The panel calls RenderOptions instead of
+// Render for such a field.
+type OptionsField interface {
+	Field
+	RenderOptions(v Value, opts []Option) templ.Component
+}
+
+// RelationInfo is what a field's Relation-style declaration recorded,
+// read by the panel at registration time to resolve the related model
+// and build the field's option loader.
+type RelationInfo struct {
+	Field string // Go struct field on the model holding the association, for example "Category"
+	Label string // field name on the related model shown as each option's label, for example "Name"
+}
+
+// RelationField is implemented by a field that needs the panel to
+// resolve a relation at registration time. SelectField is the only
+// implementation in this phase.
+type RelationField interface {
+	Field
+	// RelationInfo reports the field's Relation(...) call. ok is false
+	// when it was never called.
+	RelationInfo() (RelationInfo, bool)
+}

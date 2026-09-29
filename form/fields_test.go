@@ -28,6 +28,15 @@ func render(t *testing.T, f Field, v Value) string {
 	return buf.String()
 }
 
+func renderOptions(t *testing.T, f *SelectField, v Value, opts []Option) string {
+	t.Helper()
+	var buf bytes.Buffer
+	if err := f.RenderOptions(v, opts).Render(context.Background(), &buf); err != nil {
+		t.Fatal(err)
+	}
+	return buf.String()
+}
+
 func TestTextParse(t *testing.T) {
 	f := Text("Name").Required().MaxLength(5)
 
@@ -277,6 +286,61 @@ func TestDateFormat(t *testing.T) {
 	}
 }
 
+func TestSelectCheckRequiresRelationAndRightKind(t *testing.T) {
+	if err := Select("X").Check(tUint); err == nil {
+		t.Error("Select without Relation must be rejected")
+	}
+	if err := Select("X").Relation("Category", "Name").Check(tBool); err == nil {
+		t.Error("Select on a bool field must be rejected")
+	}
+	if err := Select("X").Relation("Category", "Name").Check(tUint); err != nil {
+		t.Error(err)
+	}
+	if err := Select("X").Relation("Category", "Name").Check(tString); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestSelectRelationInfo(t *testing.T) {
+	if _, ok := Select("CategoryID").RelationInfo(); ok {
+		t.Error("RelationInfo must report false before Relation is called")
+	}
+	f := Select("CategoryID").Relation("Category", "Name")
+	rel, ok := f.RelationInfo()
+	if !ok || rel.Field != "Category" || rel.Label != "Name" {
+		t.Errorf("RelationInfo() = %+v, %v", rel, ok)
+	}
+}
+
+func TestSelectFormat(t *testing.T) {
+	f := Select("CategoryID").Relation("Category", "Name")
+	if got := f.Format(uint(3)); got != "3" {
+		t.Errorf("Format(uint(3)) = %q", got)
+	}
+	if got := f.Format("abc"); got != "abc" {
+		t.Errorf("Format(%q) = %q", "abc", got)
+	}
+}
+
+func TestSelectParse(t *testing.T) {
+	f := Select("CategoryID").Relation("Category", "Name")
+	if got, msg := f.Parse("3", tUint); msg != "" || got != uint(3) {
+		t.Errorf("Parse(\"3\") = %v, %q", got, msg)
+	}
+	if got, msg := f.Parse("", tUint); msg != "" || got != uint(0) {
+		t.Errorf("optional empty select: %v, %q", got, msg)
+	}
+	if _, msg := f.Required().Parse("", tUint); msg == "" {
+		t.Error("empty required select must fail")
+	}
+	if _, msg := f.Parse("abc", tUint); msg == "" {
+		t.Error("non-numeric selection on a uint field must fail")
+	}
+	if got, msg := Select("Slug").Relation("Category", "Name").Parse("cat-1", tString); msg != "" || got != "cat-1" {
+		t.Errorf("string-keyed select: %v, %q", got, msg)
+	}
+}
+
 func TestDefaultLabelAndOverride(t *testing.T) {
 	if got := Text("CreatedAt").Info().Label; got != "Created at" {
 		t.Errorf("default label: %q", got)
@@ -344,5 +408,36 @@ func TestRenderDateEscapesValue(t *testing.T) {
 	}
 	if !strings.Contains(out, "Bad value") || !strings.Contains(out, `aria-invalid="true"`) {
 		t.Errorf("missing error wiring: %s", out)
+	}
+}
+
+func TestRenderSelectOptions(t *testing.T) {
+	f := Select("CategoryID").Relation("Category", "Name").Required()
+	opts := []Option{{Value: "1", Label: "Books"}, {Value: "2", Label: "Music"}}
+	out := renderOptions(t, f, Value{Raw: "2"}, opts)
+	if !strings.Contains(out, `value="1"`) || !strings.Contains(out, "Books") {
+		t.Errorf("missing option 1: %s", out)
+	}
+	if !strings.Contains(out, `value="2" selected`) || !strings.Contains(out, "Music") {
+		t.Errorf("option 2 must be selected: %s", out)
+	}
+	if strings.Contains(out, `value=""`) {
+		t.Errorf("a required select must not render an empty option: %s", out)
+	}
+}
+
+func TestRenderSelectEmptyOptionWhenNotRequired(t *testing.T) {
+	f := Select("CategoryID").Relation("Category", "Name")
+	out := renderOptions(t, f, Value{}, nil)
+	if !strings.Contains(out, `<option value=""></option>`) {
+		t.Errorf("an optional select must render a leading empty option: %s", out)
+	}
+}
+
+func TestRenderSelectEscapesLabel(t *testing.T) {
+	f := Select("CategoryID").Relation("Category", "Name")
+	out := renderOptions(t, f, Value{}, []Option{{Value: "1", Label: "\"><script>alert(1)</script>"}})
+	if strings.Contains(out, "<script>") {
+		t.Fatalf("label was not escaped: %s", out)
 	}
 }

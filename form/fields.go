@@ -282,6 +282,114 @@ func (f *DateField) Parse(raw string, target reflect.Type) (any, string) {
 
 func (f *DateField) Render(v Value) templ.Component { return dateInput(f, v) }
 
+// SelectField is a dropdown bound to an int, uint, or string field. In
+// this phase it always needs Relation: a plain, relation-free select
+// with static options is not part of this phase.
+type SelectField struct {
+	name     string
+	label    string
+	required bool
+	relation RelationInfo
+	hasRel   bool
+}
+
+// Select returns a dropdown for the named model field.
+func Select(name string) *SelectField {
+	return &SelectField{name: name, label: humanize.Name(name)}
+}
+
+// Label overrides the default label.
+func (f *SelectField) Label(label string) *SelectField { f.label = label; return f }
+
+// Required rejects an empty selection. Without it, an empty selection
+// stores the field's zero value.
+func (f *SelectField) Required() *SelectField { f.required = true; return f }
+
+// Relation declares a belongsTo association: relationField is the Go
+// struct field on the model holding the association (typically declared
+// alongside the foreign key itself, for example "Category" next to a
+// "CategoryID" field), labelField is a field name on the related model
+// shown as each option's label (for example "Name").
+func (f *SelectField) Relation(relationField, labelField string) *SelectField {
+	f.relation = RelationInfo{Field: relationField, Label: labelField}
+	f.hasRel = true
+	return f
+}
+
+// RelationInfo reports the Relation(...) call. ok is false when it was
+// never called.
+func (f *SelectField) RelationInfo() (RelationInfo, bool) { return f.relation, f.hasRel }
+
+func (f *SelectField) Info() Info {
+	return Info{Name: f.name, Label: f.label, Required: f.required}
+}
+
+func isSelectableKind(k reflect.Kind) bool {
+	switch k {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.String:
+		return true
+	}
+	return false
+}
+
+func (f *SelectField) Check(target reflect.Type) error {
+	if !f.hasRel {
+		return fmt.Errorf("form.Select(%q) needs .Relation(relationField, labelField)", f.name)
+	}
+	if !isSelectableKind(target.Kind()) {
+		return fmt.Errorf("form.Select(%q) needs an integer or string field, the model field is %s", f.name, target)
+	}
+	return nil
+}
+
+func (f *SelectField) Format(v any) string {
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return strconv.FormatInt(rv.Int(), 10)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return strconv.FormatUint(rv.Uint(), 10)
+	}
+	return fmt.Sprint(v)
+}
+
+func (f *SelectField) Parse(raw string, target reflect.Type) (any, string) {
+	raw = strings.TrimSpace(raw)
+	out := reflect.New(target).Elem()
+	if raw == "" {
+		if f.required {
+			return nil, i18n.T("validation.required")
+		}
+		return out.Interface(), ""
+	}
+	invalid := i18n.T("validation.number")
+	switch target.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		n, err := strconv.ParseInt(raw, 10, target.Bits())
+		if err != nil {
+			return nil, invalid
+		}
+		out.SetInt(n)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		n, err := strconv.ParseUint(raw, 10, target.Bits())
+		if err != nil {
+			return nil, invalid
+		}
+		out.SetUint(n)
+	case reflect.String:
+		out.SetString(raw)
+	}
+	return out.Interface(), ""
+}
+
+func (f *SelectField) Render(v Value) templ.Component { return f.RenderOptions(v, nil) }
+
+func (f *SelectField) RenderOptions(v Value, opts []Option) templ.Component {
+	return selectInput(f, v, opts)
+}
+
 // MoneyField is a currency amount bound to an integer field storing minor
 // units (e.g. cents), never a float, to avoid floating-point rounding bugs.
 type MoneyField struct {

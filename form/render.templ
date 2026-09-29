@@ -183,6 +183,30 @@ templ moneyInput(f *MoneyField, v Value) {
 	</div>
 }
 
+templ selectInput(f *SelectField, v Value, opts []Option) {
+	<div class="field">
+		@fieldLabel(f.name, f.label, f.required)
+		<select
+			class="input"
+			id={ "f-" + f.name }
+			name={ f.name }
+			required?={ f.required }
+			if v.Error != "" {
+				aria-invalid="true"
+				aria-describedby={ "e-" + f.name }
+			}
+		>
+			if !f.required {
+				<option value=""></option>
+			}
+			for _, o := range opts {
+				<option value={ o.Value } selected?={ o.Value == v.Raw }>{ o.Label }</option>
+			}
+		</select>
+		@fieldError(f.name, v.Error)
+	</div>
+}
+
 templ toggleInput(f *ToggleField, v Value) {
 	<div class="field field-toggle">
 		<label class="check">
