@@ -381,7 +381,7 @@ func (p *Panel) serverError(w http.ResponseWriter, err error) {
 
 func (p *Panel) shell(r *http.Request, u User, title, activeSlug string) ui.Shell {
 	nav := make([]ui.NavItem, 0, len(p.nav)+1)
-	if len(p.dashboardCards) > 0 {
+	if len(p.dashboardCards) > 0 || len(p.dashboardWidgets) > 0 {
 		nav = append(nav, ui.NavItem{Label: i18n.T("ui.dashboard"), Href: p.url("/"), Active: activeSlug == ""})
 	}
 	for _, e := range p.nav {

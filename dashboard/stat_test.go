@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"math"
 	"strings"
 	"testing"
 )
@@ -90,6 +91,52 @@ func TestStatRenderTrendClassAndText(t *testing.T) {
 	out = render(t, down)
 	if !strings.Contains(out, "trend-down") || !strings.Contains(out, "5%") {
 		t.Errorf("down trend render: %s", out)
+	}
+}
+
+func TestStatRenderTrendRoundsToOneDecimalPlace(t *testing.T) {
+	w := Stat("X").
+		Value(func(context.Context) (string, error) { return "1", nil }).
+		Trend(func(context.Context) (float64, bool, error) { return 100.0 / 3, true, nil })
+	out := render(t, w)
+	if !strings.Contains(out, "33.3%") {
+		t.Errorf("expected a trend rounded to one decimal place: %s", out)
+	}
+	if strings.Contains(out, "33.33") {
+		t.Errorf("trend text was not rounded: %s", out)
+	}
+}
+
+func TestStatRenderTrendShowsMagnitudeNotSign(t *testing.T) {
+	w := Stat("X").
+		Value(func(context.Context) (string, error) { return "1", nil }).
+		Trend(func(context.Context) (float64, bool, error) { return -12, false, nil })
+	out := render(t, w)
+	if !strings.Contains(out, "trend-down") || !strings.Contains(out, "12%") {
+		t.Errorf("expected the down arrow alone to carry direction: %s", out)
+	}
+	if strings.Contains(out, "-12%") {
+		t.Errorf("a negative percent must not double up with the down arrow: %s", out)
+	}
+}
+
+func TestStatRenderTrendHiddenWhenNaN(t *testing.T) {
+	w := Stat("X").
+		Value(func(context.Context) (string, error) { return "1", nil }).
+		Trend(func(context.Context) (float64, bool, error) { return math.NaN(), true, nil })
+	out := render(t, w)
+	if strings.Contains(out, "trend-up") || strings.Contains(out, "trend-down") {
+		t.Errorf("a non-finite trend value must render no badge: %s", out)
+	}
+}
+
+func TestStatRenderTrendHiddenWhenInfinite(t *testing.T) {
+	w := Stat("X").
+		Value(func(context.Context) (string, error) { return "1", nil }).
+		Trend(func(context.Context) (float64, bool, error) { return math.Inf(1), true, nil })
+	out := render(t, w)
+	if strings.Contains(out, "trend-up") || strings.Contains(out, "trend-down") {
+		t.Errorf("a non-finite trend value must render no badge: %s", out)
 	}
 }
 

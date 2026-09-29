@@ -16,12 +16,18 @@ import (
 // already called, the same way newHarness (helpers_test.go) mounts one
 // with Register(regs...). A separate helper, not an addition to
 // newHarness: Dashboard and Register are independent calls, and every
-// other test in this package needs only Register.
-func newWidgetDashboardHarness(t *testing.T, widgets ...dashboard.Widget) *harness {
+// other test in this package needs only Register. regs is optional, for
+// tests that need a real resource registered alongside the widgets (for
+// example to prove Dashboard(...) really replaces that resource's
+// automatic card rather than the test just having nothing to replace).
+func newWidgetDashboardHarness(t *testing.T, regs []Registrable, widgets ...dashboard.Widget) *harness {
 	t.Helper()
 	cfg := Config{Authenticator: newMemAuth(), SessionSecret: []byte(testSecret), InsecureCookies: true}
 	p, err := New(cfg)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Register(regs...); err != nil {
 		t.Fatal(err)
 	}
 	if err := p.Dashboard(widgets...); err != nil {
@@ -44,7 +50,8 @@ func newWidgetDashboardHarness(t *testing.T, widgets ...dashboard.Widget) *harne
 }
 
 func TestDashboardWidgetsReplaceAutomaticCards(t *testing.T) {
-	h := newWidgetDashboardHarness(t, dashboard.Stat("Email Sent").Value(func(context.Context) (string, error) {
+	prod := productResource(newMemSource(1))
+	h := newWidgetDashboardHarness(t, []Registrable{prod}, dashboard.Stat("Email Sent").Value(func(context.Context) (string, error) {
 		return "1,251 Mail", nil
 	}))
 	h.loginAdmin()
@@ -52,7 +59,21 @@ func TestDashboardWidgetsReplaceAutomaticCards(t *testing.T) {
 	if res.status != http.StatusOK {
 		t.Fatalf("status %d", res.status)
 	}
-	mustContain(t, res.body, "Email Sent", "1,251 Mail")
+	mustContain(t, res.body, "Email Sent", "1,251 Mail", `aria-current="page">Dashboard`)
+	if strings.Contains(res.body, `class="muted">Products<`) {
+		t.Errorf("the registered resource's automatic card must not render once Dashboard(...) is called: %s", res.body)
+	}
+}
+
+func TestDashboardNavShowsDashboardLinkWithOnlyWidgetsRegistered(t *testing.T) {
+	h := newWidgetDashboardHarness(t, nil, dashboard.Stat("X").Value(func(context.Context) (string, error) {
+		return "1", nil
+	}))
+	h.loginAdmin()
+	body := h.get("/").body
+	if !strings.Contains(body, `aria-current="page">Dashboard`) {
+		t.Errorf("the Dashboard nav link must show even when Dashboard(...) is the only thing configured, no Register(...): %s", body)
+	}
 }
 
 func TestDashboardMethodRejectsMisconfiguredStat(t *testing.T) {
@@ -67,7 +88,7 @@ func TestDashboardMethodRejectsMisconfiguredStat(t *testing.T) {
 }
 
 func TestDashboardWidgetValueErrorIsServerError(t *testing.T) {
-	h := newWidgetDashboardHarness(t, dashboard.Stat("Broken").Value(func(context.Context) (string, error) {
+	h := newWidgetDashboardHarness(t, nil, dashboard.Stat("Broken").Value(func(context.Context) (string, error) {
 		return "", errBoom
 	}))
 	h.loginAdmin()

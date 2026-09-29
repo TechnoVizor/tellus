@@ -3,7 +3,9 @@ package dashboard
 import (
 	"context"
 	"fmt"
+	"math"
 	"strconv"
+	"strings"
 
 	"github.com/a-h/templ"
 )
@@ -45,7 +47,11 @@ func (w *StatWidget) Value(fn func(ctx context.Context) (string, error)) *StatWi
 }
 
 // Trend sets the function that computes the card's trend badge on each
-// request. Optional: a Stat with no Trend renders no badge at all.
+// request. percent's sign is ignored; up alone decides the arrow and color
+// (green up, red down), so return whichever sign is natural for the
+// calculation. A NaN or infinite percent (for example from dividing by a
+// zero previous-period count) renders no badge, same as trendFn unset.
+// Optional: a Stat with no Trend renders no badge at all.
 func (w *StatWidget) Trend(fn func(ctx context.Context) (percent float64, up bool, err error)) *StatWidget {
 	w.trendFn = fn
 	return w
@@ -55,6 +61,8 @@ func (w *StatWidget) Trend(fn func(ctx context.Context) (percent float64, up boo
 // Stat with no Href renders as a plain, non-linked card.
 func (w *StatWidget) Href(url string) *StatWidget { w.href = url; return w }
 
+// Validate reports whether the widget is configured well enough to render,
+// checked by Panel.Dashboard before the panel starts.
 func (w *StatWidget) Validate() error {
 	if w.valueFn == nil {
 		return fmt.Errorf("dashboard.Stat(%q) needs .Value(...)", w.label)
@@ -62,6 +70,8 @@ func (w *StatWidget) Validate() error {
 	return nil
 }
 
+// Render resolves the widget's value and trend for one request and returns
+// the component that draws the card.
 func (w *StatWidget) Render(ctx context.Context) (templ.Component, error) {
 	value, err := w.valueFn(ctx)
 	if err != nil {
@@ -73,7 +83,10 @@ func (w *StatWidget) Render(ctx context.Context) (templ.Component, error) {
 		if err != nil {
 			return nil, err
 		}
-		trend = &trendValue{up: up, text: strconv.FormatFloat(percent, 'f', -1, 64) + "%"}
+		if !math.IsNaN(percent) && !math.IsInf(percent, 0) {
+			text := strings.TrimSuffix(strconv.FormatFloat(math.Abs(percent), 'f', 1, 64), ".0")
+			trend = &trendValue{up: up, text: text + "%"}
+		}
 	}
 	return statWidget(w, value, trend), nil
 }
