@@ -82,6 +82,8 @@ type resource[T any] struct {
 
 	sortable     map[string]bool
 	searchFields []string
+
+	optionLoaders []optionLoader // parallel to fields; nil entry for a field with no relation
 }
 
 func (b *ResourceBuilder[T]) register(p *Panel) error {
@@ -172,9 +174,19 @@ func (b *ResourceBuilder[T]) register(p *Panel) error {
 		if _, ok := f.(form.FileField); ok {
 			needsStorage = true
 		}
+		var loader optionLoader
+		if rf, ok := f.(form.RelationField); ok {
+			rel, _ := rf.RelationInfo() // Check already required this to be set
+			var relErr error
+			loader, relErr = resolveRelation(b.db, model, sf.Type, rel)
+			if relErr != nil {
+				return fmt.Errorf("tellus: resource %q: %w", rs.slug, relErr)
+			}
+		}
 		rs.fields = append(rs.fields, f)
 		rs.fieldIdx = append(rs.fieldIdx, sf.Index)
 		rs.fieldType = append(rs.fieldType, sf.Type)
+		rs.optionLoaders = append(rs.optionLoaders, loader)
 	}
 	if needsStorage {
 		if err := p.ensureStorage(); err != nil {
