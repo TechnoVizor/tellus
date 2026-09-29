@@ -18,6 +18,11 @@ import (
 	"github.com/TechnoVizor/tellus/table"
 )
 
+type Category struct {
+	ID   uint
+	Name string
+}
+
 type Product struct {
 	ID            uint
 	Name          string `gorm:"not null"`
@@ -26,7 +31,13 @@ type Product struct {
 	Active        bool
 	Photo         string
 	AvailableFrom time.Time
-	CreatedAt     time.Time
+	// CategoryID is a pointer: the relation is optional (some demo products
+	// have no category), and only a pointer stores NULL, which satisfies the
+	// foreign key constraint AutoMigrate creates for Category below. A plain
+	// uint would store 0 instead, and no category has id 0.
+	CategoryID *uint
+	Category   Category
+	CreatedAt  time.Time
 }
 
 func main() {
@@ -34,7 +45,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err := db.AutoMigrate(&Product{}); err != nil {
+	if err := db.AutoMigrate(&Category{}, &Product{}); err != nil {
 		log.Fatal(err)
 	}
 	seedProducts(db)
@@ -72,6 +83,7 @@ func main() {
 				form.Money("Price").Required(),
 				form.Toggle("Active"),
 				form.Date("AvailableFrom").Required(),
+				form.Select("CategoryID").Label("Category").Relation("Category", "Name"),
 			),
 	); err != nil {
 		log.Fatal(err)
@@ -119,24 +131,69 @@ var demoProducts = []struct {
 	{"USB Microphone", "Cardioid condenser, plug and play, built-in stand.", 70, true},
 }
 
+var demoCategories = []string{"Peripherals", "Audio", "Displays & Connectivity", "Desk Setup"}
+
+// productCategory maps a demo product to its category by name. Wireless
+// Charging Pad and Smart Plug are deliberately left out, so the demo also
+// shows an optional relation with nothing selected.
+var productCategory = map[string]string{
+	"Wireless Mouse":              "Peripherals",
+	"Mechanical Keyboard":         "Peripherals",
+	"Mechanical Numpad":           "Peripherals",
+	"Webcam, 1080p":               "Peripherals",
+	"USB Microphone":              "Peripherals",
+	"Noise-Cancelling Headphones": "Audio",
+	"Bluetooth Speaker":           "Audio",
+	"27-inch 4K Monitor":          "Displays & Connectivity",
+	"USB-C Hub, 7-in-1":           "Displays & Connectivity",
+	"HDMI Cable, 2m":              "Displays & Connectivity",
+	"Portable SSD, 1TB":           "Displays & Connectivity",
+	"Laptop Stand":                "Desk Setup",
+	"Desk Lamp with USB Charging": "Desk Setup",
+	"Cable Organizer Box":         "Desk Setup",
+	"Standing Desk Converter":     "Desk Setup",
+	"Ergonomic Mouse Pad":         "Desk Setup",
+	"Desk Mat, Large":             "Desk Setup",
+	"Phone Stand, Adjustable":     "Desk Setup",
+}
+
 func seedProducts(db *gorm.DB) {
 	var n int64
 	db.Model(&Product{}).Count(&n)
 	if n > 0 {
 		return
 	}
+	categoryIDs := seedCategories(db)
 	for i, p := range demoProducts {
 		// Spreads across roughly six months so the demo shows both already
 		// available and upcoming products.
 		availableFrom := time.Now().AddDate(0, 0, -60+i*7)
+		var categoryID *uint
+		if name, ok := productCategory[p.Name]; ok {
+			id := categoryIDs[name]
+			categoryID = &id
+		}
 		db.Create(&Product{
 			Name:          p.Name,
 			Description:   p.Description,
 			Price:         p.Price * 100,
 			Active:        p.Active,
 			AvailableFrom: availableFrom,
+			CategoryID:    categoryID,
 		})
 	}
+}
+
+// seedCategories creates the demo categories on first run and returns each
+// one's id by name.
+func seedCategories(db *gorm.DB) map[string]uint {
+	ids := make(map[string]uint, len(demoCategories))
+	for _, name := range demoCategories {
+		cat := Category{Name: name}
+		db.Create(&cat)
+		ids[name] = cat.ID
+	}
+	return ids
 }
 
 // seedAdmin creates the demo account on first run. Local demo credentials only.
