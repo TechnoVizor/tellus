@@ -360,7 +360,17 @@ func cleanUpload(r *http.Request) {
 func (rs *resource[T]) renderForm(w http.ResponseWriter, r *http.Request, u User, status int, heading, action string, values map[string]form.Value, summary string) {
 	comps := make([]templ.Component, len(rs.fields))
 	for i, f := range rs.fields {
-		comps[i] = f.Render(values[f.Info().Name])
+		v := values[f.Info().Name]
+		if loader := rs.optionLoaders[i]; loader != nil {
+			opts, err := loader(r.Context())
+			if err != nil {
+				rs.panel.serverError(w, err)
+				return
+			}
+			comps[i] = f.(form.OptionsField).RenderOptions(v, opts)
+			continue
+		}
+		comps[i] = f.Render(v)
 	}
 	rs.panel.render(w, r, status, ui.FormPage(ui.FormView{
 		Shell:     rs.panel.shell(r, u, heading, rs.slug),
