@@ -1,0 +1,45 @@
+package dashboard
+
+import "github.com/TechnoVizor/tellus/internal/i18n"
+
+templ statWidget(w *StatWidget, value string, trend *trendValue) {
+	if w.href != "" {
+		<a class="card dashboard-card" href={ templ.SafeURL(w.href) }>
+			@statBody(w, value, trend)
+			<span class="stat-chevron" aria-hidden="true">›</span>
+		</a>
+	} else {
+		<div class="card dashboard-card">
+			@statBody(w, value, trend)
+		</div>
+	}
+}
+
+templ statBody(w *StatWidget, value string, trend *trendValue) {
+	<div class="card-body">
+		if w.icon != "" {
+			<span class="stat-icon" aria-hidden="true">@templ.Raw(w.icon)</span>
+		}
+		<div class="muted">{ w.label }</div>
+		<div class="stat-value">{ value }</div>
+		if trend != nil {
+			<span class={ "trend", templ.KV("trend-up", trend.up), templ.KV("trend-down", !trend.up) }>
+				<span aria-hidden="true">
+					if trend.up {
+						▲
+					} else {
+						▼
+					}
+				</span>
+				{ trend.text }
+				<span class="sr-only">
+					if trend.up {
+						{ i18n.T("dashboard.trend_up") }
+					} else {
+						{ i18n.T("dashboard.trend_down") }
+					}
+				</span>
+			</span>
+		}
+	</div>
+}
