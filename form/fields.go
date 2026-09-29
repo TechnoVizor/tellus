@@ -334,11 +334,22 @@ func isSelectableKind(k reflect.Kind) bool {
 	return false
 }
 
+// selectElemKind is target's own kind, or the kind it points to when target
+// is a pointer. A pointer FK lets an optional relation store NULL (a nil
+// pointer) instead of a zero value that may not exist as a related row, so
+// it satisfies a real foreign key constraint when nothing is selected.
+func selectElemKind(target reflect.Type) reflect.Kind {
+	if target.Kind() == reflect.Pointer {
+		return target.Elem().Kind()
+	}
+	return target.Kind()
+}
+
 func (f *SelectField) Check(target reflect.Type) error {
 	if !f.hasRel {
 		return fmt.Errorf("form.Select(%q) needs .Relation(relationField, labelField)", f.name)
 	}
-	if !isSelectableKind(target.Kind()) {
+	if !isSelectableKind(selectElemKind(target)) {
 		return fmt.Errorf("form.Select(%q) needs an integer or string field, the model field is %s", f.name, target)
 	}
 	return nil
@@ -346,47 +357,79 @@ func (f *SelectField) Check(target reflect.Type) error {
 
 func (f *SelectField) Format(v any) string {
 	rv := reflect.ValueOf(v)
+	if rv.Kind() == reflect.Pointer {
+		if rv.IsNil() {
+			return ""
+		}
+		rv = rv.Elem()
+	}
 	switch rv.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		return strconv.FormatInt(rv.Int(), 10)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		return strconv.FormatUint(rv.Uint(), 10)
 	}
-	return fmt.Sprint(v)
+	return fmt.Sprint(rv.Interface())
 }
 
 func (f *SelectField) Parse(raw string, target reflect.Type) (any, string) {
 	raw = strings.TrimSpace(raw)
-	out := reflect.New(target).Elem()
+	pointer := target.Kind() == reflect.Pointer
+	elemType := target
+	if pointer {
+		elemType = target.Elem()
+	}
 	if raw == "" {
 		if f.required {
 			return nil, i18n.T("validation.required")
 		}
-		return out.Interface(), ""
+		return reflect.Zero(target).Interface(), "" // nil for a pointer, the zero value otherwise
 	}
 	invalid := i18n.T("validation.number")
-	switch target.Kind() {
+	elem := reflect.New(elemType).Elem()
+	switch elemType.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		n, err := strconv.ParseInt(raw, 10, target.Bits())
+		n, err := strconv.ParseInt(raw, 10, elemType.Bits())
 		if err != nil {
 			return nil, invalid
 		}
-		out.SetInt(n)
+		elem.SetInt(n)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		n, err := strconv.ParseUint(raw, 10, target.Bits())
+		n, err := strconv.ParseUint(raw, 10, elemType.Bits())
 		if err != nil {
 			return nil, invalid
 		}
-		out.SetUint(n)
+		elem.SetUint(n)
 	case reflect.String:
-		out.SetString(raw)
+		elem.SetString(raw)
 	}
-	return out.Interface(), ""
+	if pointer {
+		ptr := reflect.New(elemType)
+		ptr.Elem().Set(elem)
+		return ptr.Interface(), ""
+	}
+	return elem.Interface(), ""
 }
 
 func (f *SelectField) Render(v Value) templ.Component { return f.RenderOptions(v, nil) }
 
 func (f *SelectField) RenderOptions(v Value, opts []Option) templ.Component {
+	if v.Raw != "" {
+		found := false
+		for _, o := range opts {
+			if o.Value == v.Raw {
+				found = true
+				break
+			}
+		}
+		if !found {
+			// The current value's row is gone from the loaded options: past
+			// the cap, or its related row was deleted. Keep it selectable so
+			// an unrelated save does not silently reassign it to whatever
+			// option the browser defaults to.
+			opts = append([]Option{{Value: v.Raw, Label: v.Raw}}, opts...)
+		}
+	}
 	return selectInput(f, v, opts)
 }
 

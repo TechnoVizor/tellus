@@ -6,6 +6,7 @@ import (
 	"reflect"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/TechnoVizor/tellus/form"
 )
@@ -48,7 +49,11 @@ func resolveRelation(db *gorm.DB, model reflect.Type, fkType reflect.Type, rel f
 		return nil, fmt.Errorf("tellus: relation %q: %s needs exactly one primary key column", rel.Field, relatedType)
 	}
 	pk := s.PrimaryFields[0]
-	if !sameKindFamily(fkType.Kind(), pk.FieldType.Kind()) {
+	fkKind := fkType.Kind()
+	if fkKind == reflect.Pointer {
+		fkKind = fkType.Elem().Kind()
+	}
+	if !sameKindFamily(fkKind, pk.FieldType.Kind()) {
 		return nil, fmt.Errorf("tellus: relation %q: foreign key is %s, %s's primary key is %s, their kinds must match", rel.Field, fkType, relatedType, pk.FieldType)
 	}
 	labelSF, ok := s.FieldsByName[rel.Label]
@@ -56,13 +61,22 @@ func resolveRelation(db *gorm.DB, model reflect.Type, fkType reflect.Type, rel f
 		return nil, fmt.Errorf("tellus: relation %q: %s has no column for label field %q", rel.Field, relatedType, rel.Label)
 	}
 
-	table, pkCol, labelCol := s.Table, pk.DBName, labelSF.DBName
+	pkCol, labelCol := pk.DBName, labelSF.DBName
 	loader := func(ctx context.Context) ([]form.Option, error) {
 		var rows []map[string]any
-		// pkCol and labelCol are schema column names resolved once above,
-		// never request input, so building the query from them is safe.
-		q := db.WithContext(ctx).Table(table).Select(pkCol + ", " + labelCol).Order(labelCol).Limit(optionsCap)
-		if err := q.Find(&rows).Error; err != nil {
+		// Model, not Table, so GORM applies the related model's own scopes
+		// (a soft-delete filter, if it has one) the same way it would for any
+		// other query against that model. clause.Column quotes pkCol/labelCol,
+		// so a column named after a SQL reserved word still works; a stable
+		// primary-key tiebreak after the label matches how GormSource.List
+		// orders its own results.
+		err := db.WithContext(ctx).Model(reflect.New(relatedType).Interface()).
+			Select([]string{pkCol, labelCol}).
+			Order(clause.OrderByColumn{Column: clause.Column{Name: labelCol}}).
+			Order(clause.OrderByColumn{Column: clause.Column{Name: pkCol}}).
+			Limit(optionsCap).
+			Find(&rows).Error
+		if err != nil {
 			return nil, err
 		}
 		opts := make([]form.Option, len(rows))

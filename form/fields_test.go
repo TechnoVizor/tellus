@@ -17,6 +17,7 @@ var (
 	tFloat64 = reflect.TypeOf(0.0)
 	tBool    = reflect.TypeOf(false)
 	tTime    = reflect.TypeOf(time.Time{})
+	tUintPtr = reflect.TypeOf((*uint)(nil))
 )
 
 func render(t *testing.T, f Field, v Value) string {
@@ -341,6 +342,49 @@ func TestSelectParse(t *testing.T) {
 	}
 }
 
+// A pointer FK (for example *uint) lets an optional relation store NULL
+// instead of the zero value, so it satisfies a real foreign key constraint
+// when nothing is selected.
+func TestSelectCheckAcceptsPointerKind(t *testing.T) {
+	if err := Select("X").Relation("Category", "Name").Check(tUintPtr); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestSelectFormatPointer(t *testing.T) {
+	f := Select("CategoryID").Relation("Category", "Name")
+	var nilPtr *uint
+	if got := f.Format(nilPtr); got != "" {
+		t.Errorf("Format(nil *uint) = %q, want empty", got)
+	}
+	n := uint(3)
+	if got := f.Format(&n); got != "3" {
+		t.Errorf("Format(&3) = %q", got)
+	}
+}
+
+func TestSelectParsePointer(t *testing.T) {
+	f := Select("CategoryID").Relation("Category", "Name")
+	got, msg := f.Parse("", tUintPtr)
+	if msg != "" {
+		t.Fatal(msg)
+	}
+	if got != (*uint)(nil) {
+		t.Errorf("optional empty pointer select = %v, want nil", got)
+	}
+	got, msg = f.Parse("3", tUintPtr)
+	if msg != "" {
+		t.Fatal(msg)
+	}
+	p, ok := got.(*uint)
+	if !ok || p == nil || *p != 3 {
+		t.Errorf("Parse(\"3\") = %v, want a *uint pointing to 3", got)
+	}
+	if _, msg := f.Required().Parse("", tUintPtr); msg == "" {
+		t.Error("empty required pointer select must fail")
+	}
+}
+
 func TestDefaultLabelAndOverride(t *testing.T) {
 	if got := Text("CreatedAt").Info().Label; got != "Created at" {
 		t.Errorf("default label: %q", got)
@@ -439,5 +483,19 @@ func TestRenderSelectEscapesLabel(t *testing.T) {
 	out := renderOptions(t, f, Value{}, []Option{{Value: "1", Label: "\"><script>alert(1)</script>"}})
 	if strings.Contains(out, "<script>") {
 		t.Fatalf("label was not escaped: %s", out)
+	}
+}
+
+// A record's current relation value can be absent from the loaded options:
+// past the 500-row cap, or its related row soft-deleted or deleted. Without
+// a matching <option>, the browser would default the select to whatever
+// option comes first, silently changing the stored value on the next
+// unrelated save. RenderOptions must keep the current value selectable.
+func TestRenderSelectKeepsCurrentValueEvenWhenNotAmongOptions(t *testing.T) {
+	f := Select("CategoryID").Relation("Category", "Name")
+	opts := []Option{{Value: "1", Label: "Books"}}
+	out := renderOptions(t, f, Value{Raw: "99"}, opts)
+	if !strings.Contains(out, `value="99" selected`) {
+		t.Errorf("current value must still render as a selected option even though it is not among the loaded options: %s", out)
 	}
 }

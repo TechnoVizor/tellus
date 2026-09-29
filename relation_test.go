@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"gorm.io/gorm"
+
 	"github.com/TechnoVizor/tellus/form"
 	"github.com/TechnoVizor/tellus/internal/testdb"
 	"github.com/TechnoVizor/tellus/table"
@@ -21,18 +23,16 @@ type relCategory struct {
 	Name string
 }
 
+// relProduct's CategoryID is a *uint (not uint): AutoMigrate creates a real
+// foreign key constraint from the CategoryID+Category naming convention, and
+// a real constraint rejects a plain zero value (no category has id 0) when
+// the relation is optional. A pointer stores NULL instead, which the
+// constraint accepts.
 type relProduct struct {
 	ID         uint
 	Name       string
-	CategoryID uint
-	// gorm:"-": keeps Category visible to reflection (what resolveRelation
-	// needs) but invisible to GORM's own migration/association handling, so
-	// AutoMigrate does not add a real FK constraint. A real constraint would
-	// reject clearing the relation (storing the zero value, no category has
-	// id 0), a database-level concern this feature's own registration-time
-	// validation does not take over; the tests care about the panel's own
-	// behavior.
-	Category relCategory `gorm:"-"`
+	CategoryID *uint
+	Category   relCategory
 }
 
 // relProductStringKey has a string foreign key against relCategory's uint
@@ -41,6 +41,35 @@ type relProductStringKey struct {
 	ID         uint
 	CategoryID string
 	Category   relCategory
+}
+
+// relCategorySoft and relProductSoft prove a soft-deleted related row does
+// not appear in the dropdown.
+type relCategorySoft struct {
+	ID        uint
+	Name      string
+	DeletedAt gorm.DeletedAt
+}
+
+type relProductSoft struct {
+	ID         uint
+	Name       string
+	CategoryID *uint
+	Category   relCategorySoft
+}
+
+// relCategoryReserved and relProductReserved prove a label field whose
+// column name is a SQL reserved word does not crash the options query.
+type relCategoryReserved struct {
+	ID    uint
+	Order string
+}
+
+type relProductReserved struct {
+	ID         uint
+	Name       string
+	CategoryID *uint
+	Category   relCategoryReserved
 }
 
 // relStubSource is a DataSource[relProduct] used only to exercise
@@ -136,8 +165,8 @@ func TestSelectRendersSavesAndClearsRelation(t *testing.T) {
 	if err := db.Where("name = ?", "Atlas").First(&saved).Error; err != nil {
 		t.Fatal(err)
 	}
-	if saved.CategoryID != books.ID {
-		t.Fatalf("stored CategoryID = %d, want %d", saved.CategoryID, books.ID)
+	if saved.CategoryID == nil || *saved.CategoryID != books.ID {
+		t.Fatalf("stored CategoryID = %v, want %d", saved.CategoryID, books.ID)
 	}
 
 	editBody := h.get(fmt.Sprintf("/rel-products/%d/edit", saved.ID)).body
@@ -149,8 +178,8 @@ func TestSelectRendersSavesAndClearsRelation(t *testing.T) {
 	}
 	var cleared relProduct
 	db.First(&cleared, saved.ID)
-	if cleared.CategoryID != 0 {
-		t.Fatalf("CategoryID after clearing = %d, want 0", cleared.CategoryID)
+	if cleared.CategoryID != nil {
+		t.Fatalf("CategoryID after clearing = %v, want nil", *cleared.CategoryID)
 	}
 }
 
@@ -184,9 +213,13 @@ func TestSelectOptionsAreCappedAndOrdered(t *testing.T) {
 	if err := db.AutoMigrate(&relCategory{}, &relProduct{}); err != nil {
 		t.Fatal(err)
 	}
+	// Inserted in reverse label order, so the assertions below only pass if
+	// the loader really orders by label: insertion/primary-key order alone
+	// would surface "Category 500" (inserted first) and drop "Category 000"
+	// (inserted last, past the cap).
 	cats := make([]relCategory, 501)
 	for i := range cats {
-		cats[i] = relCategory{Name: fmt.Sprintf("Category %03d", i)}
+		cats[i] = relCategory{Name: fmt.Sprintf("Category %03d", 500-i)}
 	}
 	if err := db.CreateInBatches(&cats, 100).Error; err != nil {
 		t.Fatal(err)
@@ -230,5 +263,55 @@ func TestSelectOptionLoadFailureIsServerError(t *testing.T) {
 	}
 	if !strings.Contains(res2.body, "Something went wrong on our side") {
 		t.Errorf("expected the generic server-error message, got: %s", res2.body)
+	}
+}
+
+func TestSelectOptionsExcludeSoftDeletedRelatedRows(t *testing.T) {
+	db := testdb.Open(t)
+	if err := db.AutoMigrate(&relCategorySoft{}, &relProductSoft{}); err != nil {
+		t.Fatal(err)
+	}
+	keep := relCategorySoft{Name: "Keep"}
+	gone := relCategorySoft{Name: "Gone"}
+	db.Create(&keep)
+	db.Create(&gone)
+	if err := db.Delete(&gone).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	res := Resource[relProductSoft](db).Slug("rel-products-soft").
+		Table(table.Text("Name")).
+		Form(form.Text("Name").Required(), form.Select("CategoryID").Relation("Category", "Name"))
+	h := newHarness(t, Config{}, res)
+	h.loginAdmin()
+
+	body := h.get("/rel-products-soft/new").body
+	if !strings.Contains(body, "Keep") {
+		t.Error("a non-deleted category must be offered")
+	}
+	if strings.Contains(body, "Gone") {
+		t.Error("a soft-deleted category must not be offered")
+	}
+}
+
+func TestSelectOptionsHandleReservedWordLabelColumn(t *testing.T) {
+	db := testdb.Open(t)
+	if err := db.AutoMigrate(&relCategoryReserved{}, &relProductReserved{}); err != nil {
+		t.Fatal(err)
+	}
+	db.Create(&relCategoryReserved{Order: "First"})
+
+	res := Resource[relProductReserved](db).Slug("rel-products-reserved").
+		Table(table.Text("Name")).
+		Form(form.Text("Name").Required(), form.Select("CategoryID").Relation("Category", "Order"))
+	h := newHarness(t, Config{}, res)
+	h.loginAdmin()
+
+	res2 := h.get("/rel-products-reserved/new")
+	if res2.status != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", res2.status, res2.body)
+	}
+	if !strings.Contains(res2.body, "First") {
+		t.Errorf("missing option label: %s", res2.body)
 	}
 }
