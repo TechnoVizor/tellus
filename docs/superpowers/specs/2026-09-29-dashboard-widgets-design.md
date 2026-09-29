@@ -112,20 +112,35 @@ Validation happens once, inside `Dashboard(...)`, not at first request,
 matching the "a typo is reported at startup" guarantee the rest of this
 library already gives (`README.md`). `Widget` itself stays minimal (only
 `Render`); a `Stat` that has no `Value` set is instead caught through an
-unexported, optional interface `Dashboard` type-asserts for:
+optional interface, the same shape `form.FileField` already uses for
+`ImageField` (`form/file.go`): the extra interface lives in the package that
+defines it, `dashboard`, exported, embedding `Widget`, and the root package
+type-asserts against it. A Go interface's unexported method names are
+scoped to the package that declares them, so a check interface declared
+inside the root `tellus` package could never actually be satisfied by a
+method `dashboard.StatWidget` defines, that pairing would compile but the
+assertion would silently always fail; exporting it in `dashboard`, exactly
+like `FileField`, is not a style choice, it is the only version that works:
 
 ```go
-// in the root tellus package, mirroring how form.FileField is already
-// detected through a type assertion in resource.go, not through the base
-// Field interface.
-type checkedWidget interface {
-	checkConfigured() error
-}
+// in package dashboard, alongside Widget:
 
+// Validated is implemented by a widget with configuration Dashboard checks
+// before the panel starts, the same "reported at startup" guarantee the
+// rest of this library already gives. Stat implements it.
+type Validated interface {
+	Widget
+	Validate() error
+}
+```
+
+```go
+// in the root tellus package, panel.go, mirroring exactly how
+// resource.go already asserts f.(form.FileField):
 func (p *Panel) Dashboard(widgets ...dashboard.Widget) error {
 	for _, w := range widgets {
-		if cw, ok := w.(checkedWidget); ok {
-			if err := cw.checkConfigured(); err != nil {
+		if vw, ok := w.(dashboard.Validated); ok {
+			if err := vw.Validate(); err != nil {
 				return fmt.Errorf("tellus: %w", err)
 			}
 		}
@@ -135,14 +150,9 @@ func (p *Panel) Dashboard(widgets ...dashboard.Widget) error {
 }
 ```
 
-`dashboard.StatWidget` implements `checkConfigured() error` (unexported,
-package-private, satisfiable only from inside the `dashboard` package, the
-same way it is already the only place able to construct one) returning
+`dashboard.StatWidget.Validate()` returns
 `fmt.Errorf("dashboard.Stat(%q) needs .Value(...)", label)` when `Value` was
-never called. `dashboard` itself does not need to import the root `tellus`
-package for this, `checkedWidget` is defined and asserted for entirely on
-the `tellus` side; `dashboard.StatWidget` just happens to have a matching
-method, structural typing needs nothing more.
+never called, `nil` otherwise.
 
 ## 5. Panel changes
 
@@ -294,7 +304,7 @@ follows for its yes/no badge):
 ## 8. Testing
 
 - `dashboard` package: `Stat`'s builder chain sets the right internal state;
-  `checkConfigured` rejects a `Stat` with no `Value` and accepts one that
+  `Validate` rejects a `Stat` with no `Value` and accepts one that
   has it; `Render` calls `Value` (and `Trend`, when set) with the given
   context, propagates either function's error without rendering anything,
   and produces markup containing the resolved value, the icon's raw SVG
