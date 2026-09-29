@@ -281,3 +281,107 @@ func (f *DateField) Parse(raw string, target reflect.Type) (any, string) {
 }
 
 func (f *DateField) Render(v Value) templ.Component { return dateInput(f, v) }
+
+// MoneyField is a currency amount bound to an integer field storing minor
+// units (e.g. cents), never a float, to avoid floating-point rounding bugs.
+type MoneyField struct {
+	name     string
+	label    string
+	required bool
+	currency string
+}
+
+// Money returns a currency input for the named integer model field.
+func Money(name string) *MoneyField {
+	return &MoneyField{name: name, label: humanize.Name(name), currency: "$"}
+}
+
+// Label overrides the default label.
+func (f *MoneyField) Label(label string) *MoneyField { f.label = label; return f }
+
+// Required rejects empty input. Without it, empty input stores zero.
+func (f *MoneyField) Required() *MoneyField { f.required = true; return f }
+
+// Currency sets the symbol shown and accepted alongside the amount. Default "$".
+func (f *MoneyField) Currency(symbol string) *MoneyField { f.currency = symbol; return f }
+
+func (f *MoneyField) Info() Info {
+	return Info{Name: f.name, Label: f.label, Required: f.required}
+}
+
+func (f *MoneyField) Check(target reflect.Type) error {
+	switch target.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return nil
+	}
+	return fmt.Errorf("form.Money(%q) needs an integer field storing minor units (e.g. cents), the model field is %s", f.name, target)
+}
+
+func (f *MoneyField) Format(v any) string {
+	rv := reflect.ValueOf(v)
+	var cents int64
+	switch rv.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		cents = rv.Int()
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		cents = int64(rv.Uint())
+	default:
+		return fmt.Sprint(v)
+	}
+	return formatCents(cents, f.currency)
+}
+
+// moneyChars keeps only what strconv.ParseFloat needs, so a formatted
+// "$1,234.56" and a bare "1234.56" both parse the same way.
+func moneyChars(raw string) string {
+	var b strings.Builder
+	for _, r := range raw {
+		if (r >= '0' && r <= '9') || r == '.' || r == '-' {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+func formatCents(cents int64, symbol string) string {
+	sign := ""
+	if cents < 0 {
+		sign = "-"
+		cents = -cents
+	}
+	return fmt.Sprintf("%s%s%d.%02d", sign, symbol, cents/100, cents%100)
+}
+
+func (f *MoneyField) Parse(raw string, target reflect.Type) (any, string) {
+	out := reflect.New(target).Elem()
+	if strings.TrimSpace(raw) == "" {
+		if f.required {
+			return nil, i18n.T("validation.required")
+		}
+		return out.Interface(), ""
+	}
+	invalid := i18n.T("validation.number")
+	amount, err := strconv.ParseFloat(moneyChars(raw), 64)
+	if err != nil || math.IsNaN(amount) || math.IsInf(amount, 0) {
+		return nil, invalid
+	}
+	cents := int64(math.Round(amount * 100))
+	switch target.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		n, err := strconv.ParseInt(strconv.FormatInt(cents, 10), 10, target.Bits())
+		if err != nil {
+			return nil, invalid
+		}
+		out.SetInt(n)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		n, err := strconv.ParseUint(strconv.FormatInt(cents, 10), 10, target.Bits())
+		if err != nil {
+			return nil, invalid
+		}
+		out.SetUint(n)
+	}
+	return out.Interface(), ""
+}
+
+func (f *MoneyField) Render(v Value) templ.Component { return moneyInput(f, v) }

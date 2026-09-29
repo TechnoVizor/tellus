@@ -163,6 +163,26 @@ templ dateInput(f *DateField, v Value) {
 	</div>
 }
 
+templ moneyInput(f *MoneyField, v Value) {
+	<div class="field">
+		@fieldLabel(f.name, f.label, f.required)
+		<input
+			class="input"
+			type="text"
+			inputmode="decimal"
+			id={ "f-" + f.name }
+			name={ f.name }
+			value={ v.Raw }
+			required?={ f.required }
+			if v.Error != "" {
+				aria-invalid="true"
+				aria-describedby={ "e-" + f.name }
+			}
+		/>
+		@fieldError(f.name, v.Error)
+	</div>
+}
+
 templ toggleInput(f *ToggleField, v Value) {
 	<div class="field field-toggle">
 		<label class="check">

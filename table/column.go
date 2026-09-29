@@ -123,6 +123,52 @@ func (c *DateColumn) Cell(v any) templ.Component {
 	return textCell(t.Format(layout))
 }
 
+// MoneyColumn shows an integer minor-units value (e.g. cents) as a formatted
+// currency amount.
+type MoneyColumn struct {
+	name     string
+	label    string
+	sortable bool
+	currency string
+}
+
+// Money returns a currency column for the named integer field.
+func Money(name string) *MoneyColumn {
+	return &MoneyColumn{name: name, label: humanize.Name(name), currency: "$"}
+}
+
+// Label overrides the default heading.
+func (c *MoneyColumn) Label(label string) *MoneyColumn { c.label = label; return c }
+
+// Sortable makes the heading a sort link.
+func (c *MoneyColumn) Sortable() *MoneyColumn { c.sortable = true; return c }
+
+// Currency sets the symbol shown alongside the amount. Default "$".
+func (c *MoneyColumn) Currency(symbol string) *MoneyColumn { c.currency = symbol; return c }
+
+func (c *MoneyColumn) Info() Info {
+	return Info{Name: c.name, Label: c.label, Sortable: c.sortable}
+}
+
+func (c *MoneyColumn) Cell(v any) templ.Component {
+	rv := reflect.ValueOf(v)
+	var cents int64
+	switch rv.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		cents = rv.Int()
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		cents = int64(rv.Uint())
+	default:
+		return textCell("")
+	}
+	sign := ""
+	if cents < 0 {
+		sign = "-"
+		cents = -cents
+	}
+	return textCell(fmt.Sprintf("%s%s%d.%02d", sign, c.currency, cents/100, cents%100))
+}
+
 // display turns a model value into text, following pointers.
 func display(v any) string {
 	rv := reflect.ValueOf(v)

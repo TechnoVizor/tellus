@@ -140,6 +140,91 @@ func TestCheckRejectsWrongModelType(t *testing.T) {
 	}
 }
 
+func TestMoneyParse(t *testing.T) {
+	cases := []struct {
+		name   string
+		f      *MoneyField
+		raw    string
+		target reflect.Type
+		want   any
+		bad    bool
+	}{
+		{"plain integer", Money("P"), "25", tInt, int64(2500), false},
+		{"two decimals", Money("P"), "25.00", tInt, int64(2500), false},
+		{"formatted with symbol and comma", Money("P"), "$1,234.56", tInt, int64(123456), false},
+		{"negative", Money("P"), "-5.00", tInt, int64(-500), false},
+		{"rounds to nearest cent", Money("P"), "10.999", tInt, int64(1100), false},
+		{"not a number", Money("P"), "abc", tInt, nil, true},
+		{"int8 overflow", Money("P"), "1000", tInt8, nil, true},
+		{"uint negative", Money("P"), "-5.00", tUint, nil, true},
+		{"empty optional is zero", Money("P"), "", tInt, int64(0), false},
+		{"empty required fails", Money("P").Required(), "", tInt, nil, true},
+		{"symbol with no digits is invalid", Money("P"), "$", tInt, nil, true},
+	}
+	for _, tc := range cases {
+		got, msg := tc.f.Parse(tc.raw, tc.target)
+		if tc.bad {
+			if msg == "" {
+				t.Errorf("%s: expected a validation message", tc.name)
+			}
+			continue
+		}
+		if msg != "" {
+			t.Errorf("%s: unexpected message %q", tc.name, msg)
+			continue
+		}
+		rv := reflect.ValueOf(got)
+		var n int64
+		switch rv.Kind() {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			n = rv.Int()
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			n = int64(rv.Uint())
+		}
+		if n != tc.want {
+			t.Errorf("%s: got %v, want %v", tc.name, n, tc.want)
+		}
+	}
+}
+
+func TestMoneyFormat(t *testing.T) {
+	f := Money("P")
+	if got := f.Format(2500); got != "$25.00" {
+		t.Errorf("Format(2500) = %q", got)
+	}
+	if got := f.Format(-500); got != "-$5.00" {
+		t.Errorf("Format(-500) = %q", got)
+	}
+	if got := f.Format(5); got != "$0.05" {
+		t.Errorf("Format(5) = %q", got)
+	}
+	if got := Money("P").Currency("€").Format(2500); got != "€25.00" {
+		t.Errorf("custom currency: %q", got)
+	}
+}
+
+func TestMoneyCheckRejectsNonIntegerType(t *testing.T) {
+	if err := Money("X").Check(tFloat64); err == nil {
+		t.Error("Money on a float field must be rejected")
+	}
+	if err := Money("X").Check(tString); err == nil {
+		t.Error("Money on a string field must be rejected")
+	}
+	if err := Money("X").Check(tInt); err != nil {
+		t.Error(err)
+	}
+	if err := Money("X").Check(tUint); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestRenderMoney(t *testing.T) {
+	out := render(t, Money("Price"), Value{Raw: "$25.00"})
+	if !strings.Contains(out, `type="text"`) || !strings.Contains(out, `inputmode="decimal"`) || !strings.Contains(out, `value="$25.00"`) {
+		t.Errorf("money render: %s", out)
+	}
+}
+
 func TestDateParse(t *testing.T) {
 	f := Date("Published")
 	got, msg := f.Parse("2026-09-29", tTime)

@@ -65,6 +65,28 @@ func TestBooleanCell(t *testing.T) {
 	}
 }
 
+func TestMoneyColumnCell(t *testing.T) {
+	if got := cell(t, Money("Price"), 2500); got != "$25.00" {
+		t.Errorf("positive cell: %q", got)
+	}
+	if got := cell(t, Money("Price"), -500); got != "-$5.00" {
+		t.Errorf("negative cell: %q", got)
+	}
+	if got := cell(t, Money("Price").Currency("€"), 2500); got != "€25.00" {
+		t.Errorf("custom currency cell: %q", got)
+	}
+	if got := cell(t, Money("Price"), "not money"); got != "" {
+		t.Errorf("non-numeric cell must be empty, got %q", got)
+	}
+}
+
+func TestMoneyColumnInfoAndDefaults(t *testing.T) {
+	info := Money("Price").Sortable().Info()
+	if info.Name != "Price" || info.Label != "Price" || !info.Sortable {
+		t.Errorf("unexpected info: %+v", info)
+	}
+}
+
 func TestDateColumnCell(t *testing.T) {
 	in := time.Date(2026, 9, 29, 10, 15, 0, 0, time.UTC)
 	if got := cell(t, Date("Published"), in); got != "2026-09-29" {

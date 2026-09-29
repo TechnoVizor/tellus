@@ -61,7 +61,7 @@ func main() {
 			Table(
 				table.Image("Photo"),
 				table.Text("Name").Searchable().Sortable(),
-				table.Text("Price").Sortable(),
+				table.Money("Price").Sortable(),
 				table.Boolean("Active"),
 				table.Date("AvailableFrom").Sortable(),
 			).
@@ -69,7 +69,7 @@ func main() {
 				form.Image("Photo"),
 				form.Text("Name").Required().MaxLength(100),
 				form.Textarea("Description"),
-				form.Number("Price").Required(),
+				form.Money("Price").Required(),
 				form.Toggle("Active"),
 				form.Date("AvailableFrom").Required(),
 			),
@@ -89,8 +89,8 @@ func main() {
 }
 
 // demoProducts gives the demo a catalog that looks real in a screenshot,
-// instead of "Product 01", "Product 02"... Price is a plain integer (dollars):
-// Tellus does not have a Money column type yet, see docs/spec.md section 9.
+// instead of "Product 01", "Product 02"... Price here is whole dollars for
+// readability; seedProducts converts it to the cents Product.Price stores.
 var demoProducts = []struct {
 	Name        string
 	Description string
@@ -132,7 +132,7 @@ func seedProducts(db *gorm.DB) {
 		db.Create(&Product{
 			Name:          p.Name,
 			Description:   p.Description,
-			Price:         p.Price,
+			Price:         p.Price * 100,
 			Active:        p.Active,
 			AvailableFrom: availableFrom,
 		})
