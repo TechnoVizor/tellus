@@ -1,6 +1,10 @@
 package form
 
-import "strconv"
+import (
+	"strconv"
+
+	"github.com/TechnoVizor/tellus/internal/i18n"
+)
 
 templ fieldLabel(name, label string, required bool) {
 	<label class="label" for={ "f-" + name }>
@@ -76,6 +80,85 @@ templ numberInput(f *NumberField, v Value) {
 				aria-describedby={ "e-" + f.name }
 			}
 		/>
+		@fieldError(f.name, v.Error)
+	</div>
+}
+
+// dateInput is a calendar dropdown styled to match the panel instead of the
+// browser's native date picker, which does not follow the panel's theme or
+// design language. The Alpine component (datePicker, in app.js) owns the
+// value; the hidden input is what actually submits with the form.
+templ dateInput(f *DateField, v Value) {
+	<div class="field">
+		@fieldLabel(f.name, f.label, f.required)
+		<div
+			class="date-field"
+			data-value={ v.Raw }
+			x-data="datePicker"
+			x-on:keydown.escape="close()"
+			x-on:click.outside="close()"
+		>
+			<input type="hidden" name={ f.name } :value="value"/>
+			<button
+				type="button"
+				class="input date-trigger"
+				x-ref="trigger"
+				x-on:click="toggle()"
+				:aria-expanded="open"
+				aria-haspopup="dialog"
+				if v.Error != "" {
+					aria-invalid="true"
+					aria-describedby={ "e-" + f.name }
+				}
+			>
+				<span x-text="label()"></span>
+				<svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+					<rect x="1.5" y="2.5" width="13" height="12" rx="2" stroke="currentColor" stroke-width="1.2"></rect>
+					<path d="M1.5 6h13M4.5 1v3M11.5 1v3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"></path>
+				</svg>
+			</button>
+			if f.withTime {
+				<input type="time" class="input date-time" x-ref="time" x-model="time" x-on:change="commitTime()"/>
+			}
+			<div
+				class="date-panel card"
+				x-show="open"
+				x-cloak
+				x-ref="panel"
+				role="dialog"
+				aria-label={ i18n.T("date.choose_date") }
+			>
+				<div class="date-panel-head">
+					<button type="button" class="btn btn-ghost btn-sm" x-on:click="prevMonth()" aria-label={ i18n.T("date.previous_month") }>‹</button>
+					<span x-text="monthLabel()"></span>
+					<button type="button" class="btn btn-ghost btn-sm" x-on:click="nextMonth()" aria-label={ i18n.T("date.next_month") }>›</button>
+				</div>
+				<div class="date-grid" role="grid">
+					<template x-for="w in weekdays" :key="w">
+						<span class="date-grid-head" x-text="w"></span>
+					</template>
+					<template x-for="cell in grid()" :key="cell.iso">
+						<button
+							type="button"
+							class="date-cell"
+							:class="{ 'is-muted': !cell.inMonth, 'is-today': cell.isToday, 'is-selected': cell.selected }"
+							:data-iso="cell.iso"
+							:tabindex="isTabbable(cell) ? 0 : -1"
+							x-text="cell.day"
+							x-on:click="select(cell)"
+							x-on:keydown.arrow-left.prevent="move(-1, cell.iso)"
+							x-on:keydown.arrow-right.prevent="move(1, cell.iso)"
+							x-on:keydown.arrow-up.prevent="move(-7, cell.iso)"
+							x-on:keydown.arrow-down.prevent="move(7, cell.iso)"
+						></button>
+					</template>
+				</div>
+				<div class="date-panel-foot">
+					<button type="button" class="btn btn-ghost btn-sm" x-on:click="today()">{ i18n.T("date.today") }</button>
+					<button type="button" class="btn btn-ghost btn-sm" x-on:click="clear()">{ i18n.T("date.clear") }</button>
+				</div>
+			</div>
+		</div>
 		@fieldError(f.name, v.Error)
 	</div>
 }

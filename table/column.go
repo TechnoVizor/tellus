@@ -4,6 +4,7 @@ package table
 import (
 	"fmt"
 	"reflect"
+	"time"
 
 	"github.com/a-h/templ"
 
@@ -78,6 +79,48 @@ func (c *BooleanColumn) Info() Info {
 func (c *BooleanColumn) Cell(v any) templ.Component {
 	rv := reflect.ValueOf(v)
 	return boolCell(rv.Kind() == reflect.Bool && rv.Bool())
+}
+
+// DateColumn shows a time.Time value formatted as a date, or a date and time.
+type DateColumn struct {
+	name     string
+	label    string
+	sortable bool
+	withTime bool
+}
+
+// Date returns a date column for the named time.Time field.
+func Date(name string) *DateColumn {
+	return &DateColumn{name: name, label: humanize.Name(name)}
+}
+
+// DateTime returns a date-and-time column for the named time.Time field.
+func DateTime(name string) *DateColumn {
+	c := Date(name)
+	c.withTime = true
+	return c
+}
+
+// Label overrides the default heading.
+func (c *DateColumn) Label(label string) *DateColumn { c.label = label; return c }
+
+// Sortable makes the heading a sort link.
+func (c *DateColumn) Sortable() *DateColumn { c.sortable = true; return c }
+
+func (c *DateColumn) Info() Info {
+	return Info{Name: c.name, Label: c.label, Sortable: c.sortable}
+}
+
+func (c *DateColumn) Cell(v any) templ.Component {
+	t, ok := v.(time.Time)
+	if !ok || t.IsZero() {
+		return textCell("")
+	}
+	layout := "2006-01-02"
+	if c.withTime {
+		layout = "2006-01-02 15:04"
+	}
+	return textCell(t.Format(layout))
 }
 
 // display turns a model value into text, following pointers.

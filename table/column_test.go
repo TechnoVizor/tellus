@@ -5,6 +5,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 )
 
 func cell(t *testing.T, c Column, v any) string {
@@ -61,5 +62,28 @@ func TestBooleanCell(t *testing.T) {
 	}
 	if !Boolean("Active").Sortable().Info().Sortable {
 		t.Error("Sortable flag lost")
+	}
+}
+
+func TestDateColumnCell(t *testing.T) {
+	in := time.Date(2026, 9, 29, 10, 15, 0, 0, time.UTC)
+	if got := cell(t, Date("Published"), in); got != "2026-09-29" {
+		t.Errorf("date cell: %q", got)
+	}
+	if got := cell(t, DateTime("PublishedAt"), in); got != "2026-09-29 10:15" {
+		t.Errorf("datetime cell: %q", got)
+	}
+	if got := cell(t, Date("Published"), time.Time{}); got != "" {
+		t.Errorf("zero time cell must be empty, got %q", got)
+	}
+	if got := cell(t, Date("Published"), "not a time"); got != "" {
+		t.Errorf("wrong-typed value must render empty, got %q", got)
+	}
+}
+
+func TestDateColumnInfoAndDefaults(t *testing.T) {
+	info := Date("Published").Sortable().Info()
+	if info.Name != "Published" || info.Label != "Published" || !info.Sortable {
+		t.Errorf("unexpected info: %+v", info)
 	}
 }

@@ -19,13 +19,14 @@ import (
 )
 
 type Product struct {
-	ID          uint
-	Name        string `gorm:"not null"`
-	Description string
-	Price       int
-	Active      bool
-	Photo       string
-	CreatedAt   time.Time
+	ID            uint
+	Name          string `gorm:"not null"`
+	Description   string
+	Price         int
+	Active        bool
+	Photo         string
+	AvailableFrom time.Time
+	CreatedAt     time.Time
 }
 
 func main() {
@@ -62,6 +63,7 @@ func main() {
 				table.Text("Name").Searchable().Sortable(),
 				table.Text("Price").Sortable(),
 				table.Boolean("Active"),
+				table.Date("AvailableFrom").Sortable(),
 			).
 			Form(
 				form.Image("Photo"),
@@ -69,6 +71,7 @@ func main() {
 				form.Textarea("Description"),
 				form.Number("Price").Required(),
 				form.Toggle("Active"),
+				form.Date("AvailableFrom").Required(),
 			),
 	); err != nil {
 		log.Fatal(err)
@@ -122,8 +125,17 @@ func seedProducts(db *gorm.DB) {
 	if n > 0 {
 		return
 	}
-	for _, p := range demoProducts {
-		db.Create(&Product{Name: p.Name, Description: p.Description, Price: p.Price, Active: p.Active})
+	for i, p := range demoProducts {
+		// Spreads across roughly six months so the demo shows both already
+		// available and upcoming products.
+		availableFrom := time.Now().AddDate(0, 0, -60+i*7)
+		db.Create(&Product{
+			Name:          p.Name,
+			Description:   p.Description,
+			Price:         p.Price,
+			Active:        p.Active,
+			AvailableFrom: availableFrom,
+		})
 	}
 }
 

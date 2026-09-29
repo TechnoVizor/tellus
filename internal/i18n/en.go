@@ -5,9 +5,17 @@ var en = map[string]string{
 	"validation.required":        "This field is required.",
 	"validation.max_length":      "Must be at most %d characters.",
 	"validation.number":          "Enter a valid number.",
+	"validation.date":            "Enter a valid date.",
 	"validation.invalid_text":    "Contains characters that are not allowed.",
 	"validation.image_type":      "Only JPEG, PNG, GIF or WEBP images are allowed.",
 	"validation.image_too_large": "Must be at most %d MB.",
+
+	// date picker
+	"date.choose_date":    "Choose a date",
+	"date.previous_month": "Previous month",
+	"date.next_month":     "Next month",
+	"date.today":          "Today",
+	"date.clear":          "Clear",
 
 	// errors
 	"error.csrf":        "The form has expired or was not sent from this site. Reload the page and try again.",

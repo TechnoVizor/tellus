@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/a-h/templ"
@@ -14,6 +15,10 @@ import (
 	"github.com/TechnoVizor/tellus/internal/i18n"
 	"github.com/TechnoVizor/tellus/internal/secure"
 )
+
+// timeType is the reflect.Type DateField binds to, since a plain
+// reflect.Struct Kind check would also accept unrelated struct fields.
+var timeType = reflect.TypeOf(time.Time{})
 
 // TextField is a single-line or multi-line text input bound to a string field.
 type TextField struct {
@@ -205,3 +210,74 @@ func (f *ToggleField) Parse(raw string, target reflect.Type) (any, string) {
 }
 
 func (f *ToggleField) Render(v Value) templ.Component { return toggleInput(f, v) }
+
+// DateField is a date or date-and-time input bound to a time.Time field.
+type DateField struct {
+	name     string
+	label    string
+	required bool
+	withTime bool
+}
+
+// Date returns a date-only input for the named time.Time model field.
+func Date(name string) *DateField {
+	return &DateField{name: name, label: humanize.Name(name)}
+}
+
+// DateTime returns a date-and-time input for the named time.Time model field.
+func DateTime(name string) *DateField {
+	f := Date(name)
+	f.withTime = true
+	return f
+}
+
+// Label overrides the default label.
+func (f *DateField) Label(label string) *DateField { f.label = label; return f }
+
+// Required rejects empty input.
+func (f *DateField) Required() *DateField { f.required = true; return f }
+
+func (f *DateField) Info() Info {
+	return Info{Name: f.name, Label: f.label, Required: f.required}
+}
+
+func (f *DateField) Check(target reflect.Type) error {
+	if target != timeType {
+		return fmt.Errorf("form.Date(%q) needs a time.Time field, the model field is %s", f.name, target)
+	}
+	return nil
+}
+
+// layout is the HTML date/datetime-local value format, which doubles as the
+// time.Parse/Format layout since both use the same reference date.
+func (f *DateField) layout() string {
+	if f.withTime {
+		return "2006-01-02T15:04"
+	}
+	return "2006-01-02"
+}
+
+func (f *DateField) Format(v any) string {
+	t, ok := v.(time.Time)
+	if !ok || t.IsZero() {
+		return ""
+	}
+	return t.Format(f.layout())
+}
+
+func (f *DateField) Parse(raw string, target reflect.Type) (any, string) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		if f.required {
+			return nil, i18n.T("validation.required")
+		}
+		return time.Time{}, ""
+	}
+	t, err := time.Parse(f.layout(), raw)
+	if err != nil {
+		return nil, i18n.T("validation.date")
+	}
+	return t, ""
+}
+
+func (f *DateField) Render(v Value) templ.Component { return dateInput(f, v) }

@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 var (
@@ -15,6 +16,7 @@ var (
 	tUint    = reflect.TypeOf(uint(0))
 	tFloat64 = reflect.TypeOf(0.0)
 	tBool    = reflect.TypeOf(false)
+	tTime    = reflect.TypeOf(time.Time{})
 )
 
 func render(t *testing.T, f Field, v Value) string {
@@ -127,8 +129,66 @@ func TestCheckRejectsWrongModelType(t *testing.T) {
 	if err := Toggle("X").Check(tInt); err == nil {
 		t.Error("Toggle on an int field must be rejected")
 	}
+	if err := Date("X").Check(tString); err == nil {
+		t.Error("Date on a string field must be rejected")
+	}
 	if err := Text("X").Check(tString); err != nil {
 		t.Error(err)
+	}
+	if err := Date("X").Check(tTime); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestDateParse(t *testing.T) {
+	f := Date("Published")
+	got, msg := f.Parse("2026-09-29", tTime)
+	if msg != "" {
+		t.Fatal(msg)
+	}
+	want := time.Date(2026, 9, 29, 0, 0, 0, 0, time.UTC)
+	if !got.(time.Time).Equal(want) {
+		t.Errorf("Parse date = %v, want %v", got, want)
+	}
+	if _, msg := f.Parse("not-a-date", tTime); msg == "" {
+		t.Error("malformed date must fail")
+	}
+	if _, msg := f.Parse("2026-09-29T10:00", tTime); msg == "" {
+		t.Error("a datetime-local value must be rejected by the date-only layout")
+	}
+	if v, msg := f.Parse("", tTime); msg != "" || !v.(time.Time).IsZero() {
+		t.Errorf("optional empty date: v=%v msg=%q", v, msg)
+	}
+	if _, msg := f.Required().Parse("", tTime); msg == "" {
+		t.Error("empty required date must fail")
+	}
+}
+
+func TestDateTimeParse(t *testing.T) {
+	f := DateTime("PublishedAt")
+	got, msg := f.Parse("2026-09-29T10:15", tTime)
+	if msg != "" {
+		t.Fatal(msg)
+	}
+	want := time.Date(2026, 9, 29, 10, 15, 0, 0, time.UTC)
+	if !got.(time.Time).Equal(want) {
+		t.Errorf("Parse date-time = %v, want %v", got, want)
+	}
+	if _, msg := f.Parse("2026-09-29", tTime); msg == "" {
+		t.Error("a date-only value must be rejected by the date-time layout")
+	}
+}
+
+func TestDateFormat(t *testing.T) {
+	in := time.Date(2026, 9, 29, 10, 15, 0, 0, time.UTC)
+	if got := Date("P").Format(in); got != "2026-09-29" {
+		t.Errorf("Date Format = %q", got)
+	}
+	if got := DateTime("P").Format(in); got != "2026-09-29T10:15" {
+		t.Errorf("DateTime Format = %q", got)
+	}
+	if got := Date("P").Format(time.Time{}); got != "" {
+		t.Errorf("zero time must format empty, got %q", got)
 	}
 }
 
@@ -175,5 +235,29 @@ func TestRenderTextareaAndNumber(t *testing.T) {
 	num := render(t, Number("Price"), Value{Raw: "12"})
 	if !strings.Contains(num, `type="number"`) || !strings.Contains(num, `value="12"`) {
 		t.Errorf("number render: %s", num)
+	}
+}
+
+func TestRenderDateAndDateTime(t *testing.T) {
+	date := render(t, Date("Published"), Value{Raw: "2026-09-29"})
+	if !strings.Contains(date, `data-value="2026-09-29"`) || !strings.Contains(date, `name="Published"`) {
+		t.Errorf("date render: %s", date)
+	}
+	if strings.Contains(date, `type="time"`) {
+		t.Errorf("a date-only field must not render a time input: %s", date)
+	}
+	dt := render(t, DateTime("PublishedAt"), Value{Raw: "2026-09-29T10:15"})
+	if !strings.Contains(dt, `data-value="2026-09-29T10:15"`) || !strings.Contains(dt, `type="time"`) {
+		t.Errorf("datetime render: %s", dt)
+	}
+}
+
+func TestRenderDateEscapesValue(t *testing.T) {
+	out := render(t, Date("Published"), Value{Raw: `"><script>alert(1)</script>`, Error: "Bad value"})
+	if strings.Contains(out, "<script>") {
+		t.Fatalf("value was not escaped: %s", out)
+	}
+	if !strings.Contains(out, "Bad value") || !strings.Contains(out, `aria-invalid="true"`) {
+		t.Errorf("missing error wiring: %s", out)
 	}
 }
