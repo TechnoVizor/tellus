@@ -85,6 +85,13 @@ func main() {
 				form.Date("AvailableFrom").Required(),
 				form.Select("CategoryID").Label("Category").Relation("Category", "Name"),
 			),
+		tellus.Resource[Category](db).
+			Table(
+				table.Text("Name").Searchable().Sortable(),
+			).
+			Form(
+				form.Text("Name").Required().MaxLength(100),
+			),
 	); err != nil {
 		log.Fatal(err)
 	}
