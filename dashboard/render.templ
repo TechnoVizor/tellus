@@ -43,3 +43,58 @@ templ statBody(w *StatWidget, value string, trend *trendValue) {
 		}
 	</div>
 }
+
+templ donutWidget(w *DonutWidget, segs []resolvedSegment, total float64) {
+	if w.href != "" {
+		<a class="card dashboard-card" href={ templ.SafeURL(w.href) }>
+			@donutBody(w, segs, total)
+			<span class="stat-chevron" aria-hidden="true">›</span>
+		</a>
+	} else {
+		<div class="card dashboard-card">
+			@donutBody(w, segs, total)
+		</div>
+	}
+}
+
+templ donutBody(w *DonutWidget, segs []resolvedSegment, total float64) {
+	<div class="card-body">
+		<div class="muted">{ w.label }</div>
+		<div class="donut-wrap">
+			<canvas class="donut-chart" data-segments={ segmentsJSON(segs) }></canvas>
+			<div class="donut-total">{ formatNumber(total) }</div>
+		</div>
+		<ul class="donut-legend">
+			for _, s := range segs {
+				<li>
+					<span class="donut-swatch" style={ "background:var(" + s.color + ")" }></span>
+					{ s.label }
+					<span class="muted">{ formatNumber(s.value) }</span>
+				</li>
+			}
+		</ul>
+	</div>
+}
+
+templ donutEmptyWidget(w *DonutWidget) {
+	if w.href != "" {
+		<a class="card dashboard-card" href={ templ.SafeURL(w.href) }>
+			@donutEmptyBody(w)
+			<span class="stat-chevron" aria-hidden="true">›</span>
+		</a>
+	} else {
+		<div class="card dashboard-card">
+			@donutEmptyBody(w)
+		</div>
+	}
+}
+
+templ donutEmptyBody(w *DonutWidget) {
+	<div class="card-body">
+		<div class="muted">{ w.label }</div>
+		<div class="donut-wrap">
+			<div class="donut-empty" aria-hidden="true"></div>
+			<div class="donut-total">{ i18n.T("dashboard.no_data") }</div>
+		</div>
+	</div>
+}

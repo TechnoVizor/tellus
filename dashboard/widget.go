@@ -9,8 +9,8 @@ import (
 )
 
 // Widget is one piece of the dashboard's home page. A host builds a
-// dashboard from a list of these; Stat is the only implementation in this
-// phase, more follow in later work.
+// dashboard from a list of these; Stat and Donut are its two
+// implementations so far, more follow in later work.
 type Widget interface {
 	// Render draws the widget for one request. ctx carries the request's
 	// context, so a widget's own data-fetching functions can use it the

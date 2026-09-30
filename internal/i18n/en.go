@@ -38,6 +38,8 @@ var en = map[string]string{
 
 	"dashboard.trend_up":   "Trending up",
 	"dashboard.trend_down": "Trending down",
+	"dashboard.other":      "Other",
+	"dashboard.no_data":    "No data",
 
 	// login
 	"login.title":     "Sign in",
