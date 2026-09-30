@@ -32,7 +32,7 @@ func TestServesCSSAndJSWithExplicitTypes(t *testing.T) {
 }
 
 func TestVendoredLibrariesAreReallyEmbedded(t *testing.T) {
-	for _, name := range []string{"/htmx.min.js", "/alpine.min.js", "/uPlot.iife.min.js"} {
+	for _, name := range []string{"/htmx.min.js", "/alpine.min.js", "/uPlot.iife.min.js", "/chart.umd.min.js"} {
 		rec := get(t, name)
 		if rec.Code != http.StatusOK || rec.Body.Len() < 10_000 {
 			t.Errorf("%s: status %d, %d bytes", name, rec.Code, rec.Body.Len())
