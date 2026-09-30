@@ -31,6 +31,17 @@ func TestServesCSSAndJSWithExplicitTypes(t *testing.T) {
 	}
 }
 
+func TestDonutCSSAndJSAreServed(t *testing.T) {
+	css := get(t, "/app.css")
+	if !strings.Contains(css.Body.String(), "--chart-1") {
+		t.Error("app.css is missing the donut chart color tokens")
+	}
+	js := get(t, "/app.js")
+	if !strings.Contains(js.Body.String(), "initDonutCharts") {
+		t.Error("app.js is missing initDonutCharts")
+	}
+}
+
 func TestVendoredLibrariesAreReallyEmbedded(t *testing.T) {
 	for _, name := range []string{"/htmx.min.js", "/alpine.min.js", "/uPlot.iife.min.js", "/chart.umd.min.js"} {
 		rec := get(t, name)

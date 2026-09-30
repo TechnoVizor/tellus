@@ -43,6 +43,31 @@ function initDashboardCharts() {
 }
 document.addEventListener("DOMContentLoaded", initDashboardCharts);
 
+function initDonutCharts() {
+  document.querySelectorAll(".donut-chart").forEach(function (el) {
+    var existing = Chart.getChart(el);
+    if (existing) existing.destroy(); // clear a previous draw, same reason initDashboardCharts clears uPlot's
+    var segs = JSON.parse(el.dataset.segments);
+    var style = getComputedStyle(document.documentElement);
+    new Chart(el, {
+      type: "doughnut",
+      data: {
+        labels: segs.map(function (s) { return s.label; }),
+        datasets: [{
+          data: segs.map(function (s) { return s.value; }),
+          backgroundColor: segs.map(function (s) { return style.getPropertyValue(s.color).trim(); }),
+          borderWidth: 0,
+        }],
+      },
+      options: {
+        cutout: "60%",
+        plugins: { legend: { display: false } },
+      },
+    });
+  });
+}
+document.addEventListener("DOMContentLoaded", initDonutCharts);
+
 document.addEventListener("alpine:init", function () {
   Alpine.data("themeToggle", function () {
     return {
@@ -57,6 +82,7 @@ document.addEventListener("alpine:init", function () {
           localStorage.setItem("tellus-theme", next);
         } catch (e) {}
         initDashboardCharts();
+        initDonutCharts();
       },
     };
   });
