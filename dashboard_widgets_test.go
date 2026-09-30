@@ -100,3 +100,45 @@ func TestDashboardWidgetValueErrorIsServerError(t *testing.T) {
 		t.Error("internal error text leaked to the client")
 	}
 }
+
+func TestDashboardComposesStatAndDonut(t *testing.T) {
+	h := newWidgetDashboardHarness(t, nil,
+		dashboard.Stat("Email Sent").Value(func(context.Context) (string, error) {
+			return "1,251 Mail", nil
+		}),
+		dashboard.Donut("Orders by Status").Segments(func(context.Context) ([]dashboard.Segment, error) {
+			return []dashboard.Segment{{Label: "Paid", Value: 30}, {Label: "Pending", Value: 12}}, nil
+		}),
+	)
+	h.loginAdmin()
+	res := h.get("/")
+	if res.status != http.StatusOK {
+		t.Fatalf("status %d", res.status)
+	}
+	mustContain(t, res.body, "Email Sent", "1,251 Mail", "Orders by Status", "Paid", "Pending")
+}
+
+func TestDashboardMethodRejectsMisconfiguredDonut(t *testing.T) {
+	p, err := New(Config{Authenticator: newMemAuth(), SessionSecret: []byte(testSecret)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = p.Dashboard(dashboard.Donut("Broken"))
+	if err == nil || !strings.Contains(err.Error(), "Broken") {
+		t.Errorf("expected an error naming the widget, got %v", err)
+	}
+}
+
+func TestDashboardDonutSegmentsErrorIsServerError(t *testing.T) {
+	h := newWidgetDashboardHarness(t, nil, dashboard.Donut("Broken").Segments(func(context.Context) ([]dashboard.Segment, error) {
+		return nil, errBoom
+	}))
+	h.loginAdmin()
+	res := h.get("/")
+	if res.status != http.StatusInternalServerError {
+		t.Fatalf("status %d", res.status)
+	}
+	if strings.Contains(res.body, "boom") || strings.Contains(res.body, "secret") {
+		t.Error("internal error text leaked to the client")
+	}
+}
