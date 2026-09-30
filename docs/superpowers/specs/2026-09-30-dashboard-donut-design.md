@@ -326,7 +326,7 @@ the `Stat` rules already there:
 
 ```css
 .donut-wrap { position: relative; width: 140px; height: 140px; margin: 12px auto 0; }
-.donut-total { position: absolute; inset: 0; display: grid; place-items: center; font-size: 20px; font-weight: 700; }
+.donut-total { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; font-size: 20px; font-weight: 700; }
 .donut-legend { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
 .donut-legend li { display: flex; align-items: center; gap: 8px; }
 .donut-legend li .muted { margin-left: auto; }

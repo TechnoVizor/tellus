@@ -42,6 +42,18 @@ func TestDonutCSSAndJSAreServed(t *testing.T) {
 	}
 }
 
+func TestDonutTotalDoesNotBlockChartHover(t *testing.T) {
+	css := get(t, "/app.css")
+	i := strings.Index(css.Body.String(), ".donut-total {")
+	if i < 0 {
+		t.Fatal("app.css is missing the .donut-total rule")
+	}
+	rule := css.Body.String()[i : i+strings.Index(css.Body.String()[i:], "}")]
+	if !strings.Contains(rule, "pointer-events: none") {
+		t.Errorf(".donut-total must not capture pointer events (it sits on top of the canvas, blocking Chart.js's hover tooltip): %s", rule)
+	}
+}
+
 func TestVendoredLibrariesAreReallyEmbedded(t *testing.T) {
 	for _, name := range []string{"/htmx.min.js", "/alpine.min.js", "/uPlot.iife.min.js", "/chart.umd.min.js"} {
 		rec := get(t, name)
